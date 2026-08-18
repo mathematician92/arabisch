@@ -354,6 +354,13 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
     const span = el('span', 'zin');
     span.dataset.zin = zi;
     z.woorden.forEach((w, wi) => {
+      /* Een getal of jaartal: hoort in de zin maar is geen woord om te leren.
+         Neutraal tonen, niet aanklikbaar, telt niet mee als 'nog te leren'. */
+      if (!w.ids.length) {
+        span.appendChild(el('span', 'getal', w.w));
+        span.appendChild(document.createTextNode(' '));
+        return;
+      }
       let inhoud = w.ids.filter(i => lem(i) && losStaand(i));
       if (!inhoud.length) inhoud = w.ids.slice();
       /* voor- en achtervoegsels tellen niet mee: die 'ken' je nooit los */
@@ -415,7 +422,7 @@ function toonWoord(ids, zin, wi, zinEl, wEl) {
     d.appendChild(el('div', 'kop', 'De zin'));
     const ar = el('div', 'zin-ar');
     zin.woorden.forEach((w, i) => {
-      const s = el(i === wi ? 'b' : 'span', null, esc(w.w));
+      const s = el(i === wi && w.ids.length ? 'b' : 'span', null, esc(w.w));
       ar.appendChild(s); ar.appendChild(document.createTextNode(' '));
     });
     d.appendChild(ar);
