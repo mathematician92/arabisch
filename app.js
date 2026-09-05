@@ -398,8 +398,13 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
       span.appendChild(document.createTextNode(' '));
     });
     if (z.eind) span.appendChild(el('span', 'zin-eind', esc(z.eind) + ' '));
+    /* Een koranvers krijgt de haken ﴿ ﴾ eromheen en een eigen opmaak, zoals in
+       het bronmateriaal. De haken staan niet in de woordenlijst: ze horen bij
+       de weergave, niet bij de tekst die je leert. */
+    if (z.koran) span.classList.add('koran');
     t.appendChild(span);
-    if ((z.eind || '').includes('\n')) t.appendChild(el('br'));
+    /* De brontekst zet elke zin op een eigen regel; die indeling houden we aan. */
+    if (z.regeleinde) t.appendChild(el('br'));
   });
   blad.appendChild(t);
   return blad;

@@ -6,7 +6,7 @@
 <title>القراءة الراشدة — woordenschat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Scheherazade+New:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Scheherazade+New:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
 <style>
 :root{
   --paper:#E7E9E3;      /* bleke saliegrijs — het bureau */
@@ -122,6 +122,14 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 120px}
 .w.teleren:hover{background-image:none;background-color:#EDEFE7}
 .w.actief{background:var(--rubric);color:#fff}
 .zin-eind{color:var(--ink-2)}
+/* Koranvers: in het bronmateriaal tussen ﴿ ﴾, hier met dezelfde haken en de
+   rubriekkleur. De haken zijn opmaak, geen tekst — ze zitten in ::before en
+   ::after zodat ze niet meelopen bij selecteren of zoeken. */
+.zin.koran{color:var(--rubric);font-family:'Amiri Quran','Scheherazade New',serif;
+  font-size:1.04em}
+.zin.koran::before{content:'\FD3F ';font-size:.85em;opacity:.75}
+.zin.koran::after{content:' \FD3E';font-size:.85em;opacity:.75}
+.zin.koran .w.teleren{background-image:linear-gradient(var(--rubric),var(--rubric))}
 .zin.dim{opacity:.34;transition:opacity .2s}
 .w.geleend{display:inline-flex;flex-direction:column;align-items:center;
   vertical-align:baseline;line-height:1.15;margin:0 3px}
