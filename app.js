@@ -350,6 +350,9 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
   blad.appendChild(el('h2', null, titel));
   if (sub) blad.appendChild(el('p', 'sub', sub));
   const t = el('div', 'tekst');
+  /* Het boek op het element zetten, zodat de opmaak per boek kan verschillen:
+     elk leerboek heeft zijn eigen letterbeeld en dat mag de app volgen. */
+  t.dataset.boek = S.boek;
   zinnen.forEach((z, zi) => {
     const span = el('span', 'zin');
     span.dataset.zin = zi;

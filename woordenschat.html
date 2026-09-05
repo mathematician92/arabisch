@@ -6,7 +6,7 @@
 <title>القراءة الراشدة — woordenschat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Scheherazade+New:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Noto+Naskh+Arabic:wght@400;500;600&family=Scheherazade+New:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
 <style>
 :root{
   --paper:#E7E9E3;      /* bleke saliegrijs — het bureau */
@@ -122,6 +122,29 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 120px}
 .w.teleren:hover{background-image:none;background-color:#EDEFE7}
 .w.actief{background:var(--rubric);color:#fff}
 .zin-eind{color:var(--ink-2)}
+/* Al-Mohanad — de letter van العربية بين يديك. Die staat niet op Google Fonts,
+   dus het bestand hoort naast index.html te staan als lettertype/al-mohanad.ttf
+   (of .woff2, wat kleiner en sneller is). Ontbreekt het bestand, dan valt de
+   browser terug op Noto Naskh Arabic en daarna Scheherazade New, en blijft
+   alles gewoon leesbaar. */
+@font-face{
+  font-family:'Al Mohanad';
+  src:url('lettertype/al-mohanad.woff2') format('woff2'),
+      url('lettertype/al-mohanad.ttf') format('truetype');
+  font-weight:400; font-display:swap;
+}
+@font-face{
+  font-family:'Al Mohanad';
+  src:url('lettertype/al-mohanad-bold.woff2') format('woff2'),
+      url('lettertype/al-mohanad-bold.ttf') format('truetype');
+  font-weight:700; font-display:swap;
+}
+/* Letterbeeld per boek: elk leerboek heeft zijn eigen letterbeeld en de app
+   volgt dat. De keuze staat los van de data — je kunt eraan schuiven zonder
+   opnieuw te bouwen. */
+.tekst[data-boek="bayna"], .tekst[data-boek="baynatwee"]{
+  font-family:'Al Mohanad','Noto Naskh Arabic','Scheherazade New',serif;
+  font-size:.95em; line-height:2.05}
 /* Koranvers: in het bronmateriaal tussen ﴿ ﴾, hier met dezelfde haken en de
    rubriekkleur. De haken zijn opmaak, geen tekst — ze zitten in ::before en
    ::after zodat ze niet meelopen bij selecteren of zoeken. */
@@ -803,6 +826,9 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
   blad.appendChild(el('h2', null, titel));
   if (sub) blad.appendChild(el('p', 'sub', sub));
   const t = el('div', 'tekst');
+  /* Het boek op het element zetten, zodat de opmaak per boek kan verschillen:
+     elk leerboek heeft zijn eigen letterbeeld en dat mag de app volgen. */
+  t.dataset.boek = S.boek;
   zinnen.forEach((z, zi) => {
     const span = el('span', 'zin');
     span.dataset.zin = zi;
