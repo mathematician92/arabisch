@@ -29,6 +29,8 @@ const S = {
   open: 0,         // hoeveel woorden nu onthuld zijn
   klaar: false,    // hele zin zichtbaar
   lades: {},       // welke laden openstaan (niet bewaard: standaard dicht)
+  scherm: 'les',   // 'les' of 'lijst' — Mijn woorden staat naast de lessen
+  wi: { bereik: 'gekend', boek: 'alles', op: 'woord', zoek: '' },
 };
 
 const STAPPEN = [
@@ -111,6 +113,7 @@ async function laadLes(boek, nr) {
 }
 
 async function gaNaar(boek, nr) {
+  S.scherm = 'les';
   S.boek = boek; S.les = nr; S.stap = 0; S.zin = 0; S.open = 0; S.klaar = false;
   S.geklikt = new Set(); S.vraag = null; S.antwoord = null;
   document.getElementById('main').innerHTML =
@@ -222,10 +225,14 @@ function tekenKop() {
       if (i !== S.stap && (i === 0 || i === 5 || S.stap === 0 || S.stap === 5)) {
         S.geklikt = new Set();
       }
+      /* een stap aanklikken brengt je terug uit Mijn woorden */
+      S.scherm = 'les';
       S.stap = i; S.antwoord = null; teken(); window.scrollTo(0, 0);
     };
     st.appendChild(b);
   });
+  const bi = document.getElementById('btnIndex');
+  if (bi) bi.classList.toggle('aan', S.scherm === 'lijst');
 }
 
 /* ---------------- woordenlijst ---------------- */
@@ -807,11 +814,188 @@ function tekenMoeilijk() {
   return lade;
 }
 
+/* ---------------- mijn woorden ----------------
+   Eén doorlopend overzicht van alles wat je kent, los van de lessen en over
+   alle boeken heen. `gekend` is immers één verzameling. */
+
+/* Sorteersleutel: klinkertekens eraf en de schrijfvarianten gelijkgetrokken,
+   zodat أَحْمَد onder de alif staat en سَمَاء naast سَمَاءٌ. Na deze bewerking
+   staan de Arabische letters in Unicode al in alfabetische volgorde, dus een
+   gewone vergelijking volstaat — `localeCompare('ar')` is niet nodig.
+   Het lidwoord blijft staan: strippen zou اِلْتَفَتَ (achtste stam) tot تفت
+   maken, en dat is een ander woord. */
+const WI_DIA = /[\u064B-\u0652\u0670\u0640\u0653-\u065F\u06D6-\u06ED]/g;
+const ALFABET = [...'ابتثجحخدذرزسشصضطظعغفقكلمنهوي'];
+function sorteersleutel(s) {
+  return (s || '').replace(WI_DIA, '')
+    .replace(/[\u0623\u0625\u0622\u0671\u0621]/g, '\u0627')  /* أ إ آ ٱ ء → ا */
+    .replace(/\u0629/g, '\u0647')                            /* ة → ه */
+    .replace(/[\u0649\u0626]/g, '\u064A')                    /* ى ئ → ي */
+    .replace(/\u0624/g, '\u0648');                           /* ؤ → و */
+}
+
+function wiKnoppen(veld, opties) {
+  const wr = el('div', 'wi-groepknoppen');
+  for (const [waarde, tekst] of opties) {
+    const b = el('button', 'wi-kn' + (S.wi[veld] === waarde ? ' aan' : ''), esc(tekst));
+    b.onclick = () => { S.wi[veld] = waarde; teken(); };
+    wr.appendChild(b);
+  }
+  return wr;
+}
+
+function tekenIndex() {
+  const wi = S.wi;
+  const blad = el('div', 'blad');
+  blad.appendChild(el('h2', null, 'Mijn woorden'));
+
+  /* ---- welke woorden horen erbij ---- */
+  const bron = wi.bereik === 'moeilijk' ? [...S.moeilijk]
+             : wi.bereik === 'alles' ? Object.keys(S.lemmas)
+             : [...S.gekend];
+  const zoekAr = sorteersleutel(wi.zoek.trim());
+  const zoekNl = wi.zoek.trim().toLowerCase();
+  const rijen = [];
+  for (const id of bron) {
+    const e = lem(id);
+    /* bouwsteentjes horen hier net zomin thuis als in de voortgangsbalk */
+    if (!e || isBouwsteen(id)) continue;
+    if (wi.boek !== 'alles' &&
+        !(e.komt || []).some(s => s.slice(0, s.lastIndexOf('-')) === wi.boek)) continue;
+    const k = sorteersleutel(e.lemma);
+    if (wi.zoek.trim() && !k.includes(zoekAr) &&
+        !(e.nl || '').toLowerCase().includes(zoekNl)) continue;
+    rijen.push({ id, e, k });
+  }
+  rijen.sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
+
+  const sub = el('p', 'sub');
+  sub.textContent = wi.bereik === 'moeilijk'
+    ? `${rijen.length} ${rijen.length === 1 ? 'woord staat' : 'woorden staan'} op je moeilijke lijst.`
+    : wi.bereik === 'alles'
+      ? `${rijen.length} van de ${Object.keys(S.lemmas).length} woorden in de bank.`
+      : `${rijen.length} ${rijen.length === 1 ? 'woord' : 'woorden'} die je kent` +
+        (S.moeilijk.size ? `, waarvan ${[...S.moeilijk].filter(i => S.gekend.has(i)).length} met een stip: die staan ook op je moeilijke lijst.` : '.');
+  blad.appendChild(sub);
+
+  /* ---- de knoppenbalk ---- */
+  const balk = el('div', 'wi-balk');
+  const zoek = document.createElement('input');
+  zoek.type = 'text'; zoek.value = wi.zoek;
+  zoek.placeholder = 'Zoek in het Arabisch of Nederlands';
+  zoek.setAttribute('aria-label', 'Zoeken');
+  /* niet opnieuw tekenen bij elke toetsaanslag: dat kost bij duizenden
+     woorden merkbaar tijd op de tablet */
+  let tik = null;
+  zoek.oninput = () => {
+    clearTimeout(tik);
+    tik = setTimeout(() => {
+      wi.zoek = zoek.value;
+      teken();
+      const nw = document.querySelector('.wi-balk input');
+      if (nw) { nw.focus(); nw.setSelectionRange(nw.value.length, nw.value.length); }
+    }, 220);
+  };
+  balk.appendChild(zoek);
+  balk.appendChild(wiKnoppen('bereik', [['gekend', 'Gekend'], ['moeilijk', 'Moeilijk'], ['alles', 'Alles']]));
+  balk.appendChild(wiKnoppen('op', [['woord', 'Op woord'], ['wortel', 'Op wortel']]));
+  /* de boektitels zijn te lang voor knoppen */
+  const bk = el('select', 'les-kies');
+  bk.setAttribute('aria-label', 'Filter op boek');
+  bk.style.marginLeft = '0';
+  for (const [waarde, tekst] of [['alles', 'Alle boeken'],
+       ...S.index.boeken.map(b => [b.id, b.ondertitel || b.titel])]) {
+    const o = document.createElement('option');
+    o.value = waarde; o.textContent = tekst;
+    if (wi.boek === waarde) o.selected = true;
+    bk.appendChild(o);
+  }
+  bk.onchange = () => { wi.boek = bk.value; teken(); };
+  balk.appendChild(bk);
+  blad.appendChild(balk);
+
+  if (!rijen.length) {
+    blad.appendChild(el('div', 'leeg', wi.zoek.trim()
+      ? 'Niets gevonden.'
+      : 'Hier komen de woorden te staan zodra je een les hebt afgerond.'));
+    return blad;
+  }
+
+  /* ---- groeperen ---- */
+  const groepen = [];   // {kop, sleutel, rijen}
+  if (wi.op === 'wortel') {
+    const bak = new Map();
+    for (const r of rijen) {
+      const w = r.e.root || '';
+      if (!bak.has(w)) bak.set(w, []);
+      bak.get(w).push(r);
+    }
+    const wortels = [...bak.keys()].filter(Boolean)
+      .sort((a, b) => { const x = sorteersleutel(a), y = sorteersleutel(b); return x < y ? -1 : x > y ? 1 : 0; });
+    for (const w of wortels) groepen.push({ kop: [...w].join(' '), rijen: bak.get(w) });
+    if (bak.has('')) groepen.push({ kop: 'zonder wortel', rijen: bak.get(''), plat: true });
+  } else {
+    const bak = new Map();
+    for (const r of rijen) {
+      const c = ALFABET.includes(r.k[0]) ? r.k[0] : '*';
+      if (!bak.has(c)) bak.set(c, []);
+      bak.get(c).push(r);
+    }
+    for (const c of ALFABET) if (bak.has(c)) groepen.push({ kop: c, letter: c, rijen: bak.get(c) });
+    if (bak.has('*')) groepen.push({ kop: 'overig', rijen: bak.get('*'), plat: true });
+  }
+
+  /* ---- letterbalk om naartoe te springen ---- */
+  if (wi.op === 'woord') {
+    const lb = el('div', 'wi-letters');
+    for (const c of ALFABET) {
+      const g = groepen.findIndex(x => x.letter === c);
+      const b = el('button', null, c);
+      if (g < 0) b.disabled = true;
+      else b.onclick = () => {
+        const d = document.getElementById('wi-g' + g);
+        if (d) d.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      };
+      lb.appendChild(b);
+    }
+    blad.appendChild(lb);
+  }
+
+  /* ---- de lijst zelf ----
+     In één keer als HTML-tekst opgebouwd en met één klikafhandelaar op de
+     omhulling: bij drieduizend regels is een knoop per woord te traag. */
+  const stukken = [];
+  groepen.forEach((g, i) => {
+    const rs = g.rijen.map(r =>
+      `<button class="wi-rij c-${r.e.cat}" data-id="${esc(r.id)}">` +
+      `<span class="wi-ar">${esc(r.e.lemma)}</span>` +
+      `<span class="wi-nl">${esc(r.e.nl || '')}</span>` +
+      (S.moeilijk.has(r.id) ? '<span class="wi-ml" aria-label="moeilijk"></span>' : '') +
+      '</button>').join('');
+    stukken.push(
+      `<div class="wi-groep" id="wi-g${i}">` +
+      `<div class="wi-kop"><span class="${g.plat ? '' : 'lt'}">${esc(g.kop)}</span>` +
+      `<span class="tel">${g.rijen.length}</span></div>` +
+      `<div class="wi-rijen">${rs}</div></div>`);
+  });
+  const wrap = el('div', 'woordindex', stukken.join(''));
+  wrap.onclick = ev => {
+    const b = ev.target.closest('.wi-rij');
+    if (b) toonWoord([b.dataset.id], null, null, null, null);
+  };
+  blad.appendChild(wrap);
+  return blad;
+}
+
 /* ---------------- schermen ---------------- */
 function teken() {
   tekenKop();
   const m = document.getElementById('main');
   m.innerHTML = '';
+
+  /* Mijn woorden staat naast de lessen, niet erin: geen les nodig */
+  if (S.scherm === 'lijst') { m.appendChild(tekenIndex()); return; }
+
   const L = les(S.les);
   const sp = splitsLes(S.les);
 
@@ -964,6 +1148,11 @@ document.getElementById('btnUit').onclick =
   () => stelWeergaveIn('zoom', Math.max(0.75, Math.round(((S.zoom || 1) - 0.15) * 100) / 100));
 document.getElementById('btnDonker').onclick = () => stelWeergaveIn('donker', !S.donker);
 pasWeergaveToe();
+
+document.getElementById('btnIndex').onclick = () => {
+  S.scherm = S.scherm === 'lijst' ? 'les' : 'lijst';
+  teken(); window.scrollTo(0, 0);
+};
 
 document.getElementById('btnDicht').onclick = sluitPaneel;
 document.getElementById('scanDicht').onclick = () => document.getElementById('scan').classList.remove('aan');
