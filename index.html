@@ -407,10 +407,15 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 .boek-kies{display:none;margin-left:0;max-width:220px}
 .oefen-kies{display:none;width:100%;margin-top:14px}
 @media(max-width:699px){
-  .les-tabs{display:none}
-  .les-kies{display:block}
   .oefen-rij{display:none}
   .oefen-kies{display:block}
+}
+/* De lestabs zijn met 183 lessen alleen op een breed scherm nog te doen.
+   Tot en met de tablet dus het keuzemenu. Wil je ze ook op de laptop kwijt,
+   zet dit getal dan hoger; 4000px haalt ze overal weg. */
+@media(max-width:1200px){
+  .les-tabs{display:none}
+  .les-kies{display:block}
 }
 .weergave{display:flex;gap:2px;margin-left:8px}
 .weergave button{
