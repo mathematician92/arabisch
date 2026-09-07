@@ -22,6 +22,7 @@ const S = {
   zoom: 1,         // tekstgrootte van de Arabische tekst
   tempo: 0.9,      // voorleessnelheid
   stemnaam: '',    // zelf gekozen stem, leeg = de app kiest
+  alleStemmen: false, // ook niet-Arabische stemmen in de keuze
   donker: false,   // donkere modus
   vraag: null,     // huidige oefenvraag
   antwoord: null,  // gegeven antwoord
@@ -746,26 +747,41 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
       Stem.herstart();          /* klinkt er iets, dan meteen op de nieuwe snelheid */
     };
     balk.appendChild(tk);
-    /* welke stem er spreekt, en de mogelijkheid om te wisselen */
-    const sk = el('select', 'oefen-kies stem-kies');
-    sk.setAttribute('aria-label', 'Stem');
+    /* Welke stem er spreekt. Alleen de Arabische: een Nederlandse of Engelse
+       stem maakt van Arabische letters onverstaanbare klanken of zwijgt
+       helemaal, dus die horen niet in de keuze. Staat er geen enkele
+       Arabische stem op het toestel, dan pas alle stemmen, zodat je er zelf
+       een kunt aanwijzen als de taal verkeerd gelabeld is. */
+    const bruikbaar = Stem.arabisch.length ? Stem.arabisch : [];
     if (!Stem.lijst.length) {
       balk.appendChild(el('span', 'leesbalk-uitleg',
         'Dit toestel heeft nog geen stemmen geladen. Ververs de pagina; blijft het leeg, dan heeft de browser er geen.'));
       p.disabled = true;
+    } else if (!bruikbaar.length && !S.alleStemmen) {
+      p.disabled = true;
+      balk.appendChild(el('span', 'leesbalk-uitleg',
+        'Geen Arabische stem op dit toestel. Op Windows kun je er een bijzetten via Instellingen \u2192 Tijd en taal \u2192 Spraak.'));
+      const alle = el('button', 'leesbalk-los', 'Toch alle stemmen tonen');
+      alle.onclick = () => { stelWeergaveIn('alleStemmen', true); teken(); };
+      balk.appendChild(alle);
     } else {
-      for (const v of Stem.lijst) {
+      const tonen = S.alleStemmen ? Stem.lijst : bruikbaar;
+      const sk = el('select', 'oefen-kies stem-kies');
+      sk.setAttribute('aria-label', 'Stem');
+      for (const v of tonen) {
         const o = document.createElement('option');
         o.value = v.name;
-        o.textContent = v.name + ' (' + v.lang + ')';
+        /* een stem die van het net moet komen werkt niet zonder verbinding */
+        o.textContent = v.name + (v.localService === false ? ' \u2014 online' : '');
         if (Stem.stem && v.name === Stem.stem.name) o.selected = true;
         sk.appendChild(o);
       }
-      sk.onchange = () => Stem.kies(sk.value);
       balk.appendChild(sk);
-      if (!Stem.arabisch.length) {
-        balk.appendChild(el('span', 'leesbalk-uitleg',
-          'Geen Arabische stem op dit toestel — installeer er een, of kies er hierboven zelf een.'));
+      sk.onchange = () => Stem.kies(sk.value);
+      if (S.alleStemmen) {
+        const terug = el('button', 'leesbalk-los', 'Alleen Arabische stemmen');
+        terug.onclick = () => { stelWeergaveIn('alleStemmen', false); teken(); };
+        balk.appendChild(terug);
       }
     }
     blad.appendChild(balk);
@@ -784,6 +800,7 @@ const TEMPOS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.25, 1.5];
 const Stem = {
   lijst: [], arabisch: [], stem: null, rij: [], idx: 0, bezig: false,
   beurt: 0,           // elke leesronde krijgt een nummer, zie speel()
+  klok: null,         // houdt Chrome wakker tijdens het lezen
   opZin: null, naAfloop: null,
 
   kan() { return typeof speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined'; },
@@ -795,14 +812,20 @@ const Stem = {
     if (!this.kan()) return;
     const alle = speechSynthesis.getVoices() || [];
     const isAr = v => /^ar(-|_|$)/i.test(v.lang || '');
-    this.arabisch = alle.filter(isAr);
+    /* stemmen die van het net moeten komen achteraan: die haperen zonder
+       verbinding en zijn juist bij lange teksten onbetrouwbaar */
+    this.arabisch = alle.filter(isAr)
+      .sort((a, b) => (a.localService === false) - (b.localService === false));
     this.lijst = this.arabisch.concat(alle.filter(v => !isAr(v)));
     /* de betere stemmen eerst: Apple's Maged en Google's ar-XA klinken
        een stuk natuurlijker dan de standaardkeuze */
     const beter = /maged|tarik|laila|hoda|majed|enhanced|premium|natural|google/i;
-    const bewaard = this.lijst.find(v => v.name === S.stemnaam);
-    this.stem = bewaard || this.arabisch.find(v => beter.test(v.name)) ||
-                this.arabisch[0] || null;
+    /* een eerder gekozen stem alleen aanhouden als hij er nog is */
+    const kiesbaar = (this.arabisch.length && !S.alleStemmen) ? this.arabisch : this.lijst;
+    const bewaard = kiesbaar.find(v => v.name === S.stemnaam);
+    const lokaal = this.arabisch.filter(v => v.localService !== false);
+    const eerst = lokaal.length ? lokaal : this.arabisch;
+    this.stem = bewaard || eerst.find(v => beter.test(v.name)) || eerst[0] || null;
   },
 
   kies(naam) {
@@ -821,6 +844,7 @@ const Stem = {
   leeg() {
     this.rij = []; this.idx = 0; this.bezig = false;
     this.beurt++;     /* alles wat nog van de vorige ronde binnenkomt is oud */
+    clearInterval(this.klok);
     if (this.kan()) { try { speechSynthesis.cancel(); } catch (e) { /* laat maar */ } }
   },
 
@@ -837,17 +861,34 @@ const Stem = {
     this.speel(this.rij, this.opZin, this.naAfloop, Math.max(0, this.idx - 1));
   },
 
-  /* één stuk tekst uitspreken */
-  zeg(tekst, na) {
+  /* één stuk tekst uitspreken. `begin` wordt geroepen zodra de stem echt
+     begint, niet zodra de zin in de wachtrij gaat: anders loopt de markering
+     voor op het geluid en spring je vanaf het verkeerde nummer. */
+  zeg(tekst, na, begin) {
     if (!tekst) { if (na) na(); return false; }
     const u = new SpeechSynthesisUtterance(tekst);
     if (this.stem) u.voice = this.stem;
     u.lang = (this.stem && this.stem.lang) || 'ar-SA';
     u.rate = S.tempo || 0.9;
+    let gemeld = false;
+    u.onstart = () => { if (!gemeld) { gemeld = true; if (begin) begin(); } };
     u.onend = () => { if (na) na(); };
     u.onerror = () => { if (na) na(); };
     speechSynthesis.speak(u);
+    /* Niet elke browser meldt `onstart` betrouwbaar. Blijft die uit, dan
+       toch markeren, zodat de zin nooit ongemarkeerd blijft. */
+    setTimeout(() => { if (!gemeld) { gemeld = true; if (begin) begin(); } }, 350);
     return true;
+  },
+
+  /* Chrome legt het voorlezen na een halve minuut spontaan stil. Een tikje
+     pause/resume houdt het aan de praat. */
+  wakker() {
+    clearInterval(this.klok);
+    this.klok = setInterval(() => {
+      if (!this.bezig) { clearInterval(this.klok); return; }
+      try { speechSynthesis.pause(); speechSynthesis.resume(); } catch (e) { /* niet erg */ }
+    }, 9000);
   },
 
   /* een reeks zinnen achter elkaar, met terugkoppeling welke er klinkt */
@@ -857,6 +898,7 @@ const Stem = {
      dat nummer zou die oude melding de nieuwe ronde vooruit duwen. */
   speel(zinnen, opZin, naAfloop, vanaf) {
     if (!this.kan()) return;
+    const liep = this.bezig;
     this.leeg();
     const mijn = this.beurt;
     this.rij = zinnen; this.idx = vanaf || 0; this.bezig = true;
@@ -866,14 +908,19 @@ const Stem = {
       if (!this.bezig || this.idx >= this.rij.length) {
         const voltooid = this.idx >= this.rij.length;
         this.bezig = false;
+        clearInterval(this.klok);
         if (this.naAfloop) this.naAfloop(voltooid);
         return;
       }
       const i = this.idx++;
-      if (this.opZin) this.opZin(i);
-      this.zeg(this.zinTekst(this.rij[i]), volgende);
+      this.zeg(this.zinTekst(this.rij[i]), volgende,
+        () => { if (mijn === this.beurt && this.opZin) this.opZin(i); });
     };
-    volgende();
+    this.wakker();
+    /* Vlak na `cancel()` is de spraakmotor nog aan het opruimen en laat hij een
+       nieuwe zin soms vallen. Even wachten als er echt iets liep. */
+    if (liep) setTimeout(() => { if (mijn === this.beurt) volgende(); }, 140);
+    else volgende();
   },
 };
 if (Stem.kan()) {
@@ -1616,7 +1663,8 @@ function pasWeergaveToe() {
 
 function stelWeergaveIn(veld, waarde) {
   S[veld] = waarde;
-  localStorage.setItem('qirat.weergave', JSON.stringify({ zoom: S.zoom, donker: S.donker, tempo: S.tempo, stemnaam: S.stemnaam }));
+  localStorage.setItem('qirat.weergave', JSON.stringify({ zoom: S.zoom, donker: S.donker, tempo: S.tempo,
+    stemnaam: S.stemnaam, alleStemmen: S.alleStemmen }));
   pasWeergaveToe();
 }
 
@@ -1627,6 +1675,7 @@ try {
   /* wg.traag komt uit de vorige versie: die knop had twee standen */
   S.tempo = wg.tempo || (wg.traag ? 0.6 : 0.9);
   S.stemnaam = wg.stemnaam || '';
+  S.alleStemmen = !!wg.alleStemmen;
 } catch (e) { /* eerste keer */ }
 
 document.getElementById('btnIn').onclick =
