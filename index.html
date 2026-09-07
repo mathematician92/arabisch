@@ -530,6 +530,29 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 .wolk-staat.bezig i{background:var(--merk)}
 .wolk-staat.fout i{background:var(--rubric)}
 
+/* ---------- voorlezen ---------- */
+.leesbalk{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin-top:16px;padding-top:14px;border-top:1px solid var(--line)
+}
+.leesbalk .knop.bezig{border-color:var(--rubric);color:var(--rubric)}
+.leesbalk-label{font-size:12px;color:var(--ink-2)}
+.tempo-kies{display:block;width:auto;margin-top:0;min-height:38px;padding:6px 30px 6px 10px;font-size:13px}
+.leesbalk-stem{font-size:11px;color:var(--faded);margin-left:auto}
+.spreek{
+  font-size:15px;line-height:1;color:var(--ink-2);
+  min-width:32px;height:32px;border-radius:var(--r);flex:0 0 auto
+}
+.spreek:hover{background:var(--paper);color:var(--rubric)}
+.spreek.groot{
+  font-size:13px;font-family:'IBM Plex Sans',sans-serif;width:auto;padding:0 14px;
+  height:40px;border:1px solid var(--line);margin-top:12px;color:var(--ink-2)
+}
+.spreek.groot:hover{border-color:var(--rubric)}
+.lemma-rij{display:flex;align-items:center;gap:8px}
+.lemma-rij .lemma-groot{flex:1 1 auto;min-width:0}
+.zin.klinkt{background:var(--merk-zacht,rgba(196,151,74,.16));border-radius:var(--r)}
+
 .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);border-top-color:var(--rubric);
       border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
 @keyframes sp{to{transform:rotate(360deg)}}

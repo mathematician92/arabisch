@@ -20,6 +20,7 @@ const S = {
   bezig: false,
   fout: '',
   zoom: 1,         // tekstgrootte van de Arabische tekst
+  tempo: 0.9,      // voorleessnelheid
   donker: false,   // donkere modus
   vraag: null,     // huidige oefenvraag
   antwoord: null,  // gegeven antwoord
@@ -346,6 +347,7 @@ async function laadLes(boek, nr) {
 }
 
 async function gaNaar(boek, nr) {
+  Stem.stop();
   S.scherm = 'les';
   S.boek = boek; S.les = nr; S.stap = 0; S.zin = 0; S.open = 0; S.klaar = false;
   S.geklikt = new Set(); S.vraag = null; S.antwoord = null;
@@ -459,6 +461,7 @@ function tekenKop() {
         S.geklikt = new Set();
       }
       /* een stap aanklikken brengt je terug uit Mijn woorden */
+      Stem.stop();
       S.scherm = 'les';
       S.stap = i; S.antwoord = null; teken(); window.scrollTo(0, 0);
     };
@@ -650,7 +653,147 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
     if (z.regeleinde) t.appendChild(el('br'));
   });
   blad.appendChild(t);
+
+  /* voorlezen: de hele tekst achter elkaar, met de zin die klinkt gemarkeerd */
+  if (Stem.stem) {
+    const balk = el('div', 'leesbalk');
+    const p = el('button', 'knop zacht', '&#9654; Lees de tekst voor');
+    const merk = i => {
+      t.querySelectorAll('.zin.klinkt').forEach(z => z.classList.remove('klinkt'));
+      if (i >= 0) {
+        const z = t.querySelector('.zin[data-zin="' + i + '"]');
+        if (z) {
+          z.classList.add('klinkt');
+          if (z.scrollIntoView) z.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    };
+    const uit = () => { p.innerHTML = '&#9654; Lees de tekst voor'; p.classList.remove('bezig'); };
+    p.onclick = () => {
+      if (Stem.bezig) { Stem.stop(); return; }
+      p.innerHTML = '&#9632; Stop';
+      p.classList.add('bezig');
+      Stem.speel(zinnen, merk, uit);
+    };
+    balk.appendChild(p);
+    balk.appendChild(el('label', 'leesbalk-label', 'Tempo'));
+    const tk = el('select', 'oefen-kies tempo-kies');
+    tk.setAttribute('aria-label', 'Voorleessnelheid');
+    for (const v of TEMPOS) {
+      const o = document.createElement('option');
+      o.value = String(v);
+      o.textContent = (v === 1 ? 'normaal' : String(v).replace('.', ',') + '\u00D7');
+      if (Math.abs(v - (S.tempo || 0.9)) < 0.001) o.selected = true;
+      tk.appendChild(o);
+    }
+    tk.onchange = () => {
+      stelWeergaveIn('tempo', parseFloat(tk.value));
+      Stem.herstart();          /* klinkt er iets, dan meteen op de nieuwe snelheid */
+    };
+    balk.appendChild(tk);
+    balk.appendChild(el('span', 'leesbalk-stem', esc(Stem.stem.name)));
+    blad.appendChild(balk);
+  }
   return blad;
+}
+
+/* ---------------- voorlezen ----------------
+   De stemmen van het toestel zelf (SpeechSynthesis). Geen abonnement, geen
+   sleutel, werkt ook zonder verbinding zodra de stem eenmaal geladen is.
+   iOS en Android hebben een goede Arabische stem ingebouwd; Windows meestal
+   niet — daar moet je hem er in de taalinstellingen bij zetten. Vindt de app
+   geen Arabische stem, dan verschijnen de knoppen gewoon niet. */
+const TEMPOS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.25, 1.5];
+const Stem = {
+  lijst: [], stem: null, rij: [], idx: 0, bezig: false,
+  opZin: null, naAfloop: null,
+
+  kan() { return typeof speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined'; },
+
+  zoek() {
+    if (!this.kan()) return;
+    this.lijst = speechSynthesis.getVoices().filter(v => /^ar(-|_|$)/i.test(v.lang));
+    /* de betere stemmen eerst: Apple's Maged en Google's ar-XA klinken
+       een stuk natuurlijker dan de standaardkeuze */
+    const beter = /maged|tarik|laila|hoda|majed|enhanced|premium|natural|google/i;
+    this.stem = this.lijst.find(v => beter.test(v.name)) || this.lijst[0] || null;
+  },
+
+  /* de losse woorden van een zin weer aan elkaar */
+  zinTekst(z) {
+    return z.woorden.map(w => w.w).join(' ') + (z.eind ? ' ' + z.eind : '');
+  },
+
+  leeg() {
+    this.rij = []; this.idx = 0; this.bezig = false;
+    if (this.kan()) { try { speechSynthesis.cancel(); } catch (e) { /* laat maar */ } }
+  },
+
+  stop() {
+    const oz = this.opZin, na = this.naAfloop;
+    this.leeg();
+    if (oz) oz(-1);
+    if (na) na();
+  },
+
+  /* Het tempo van een zin die al klinkt kan niet halverwege veranderen.
+     Dus: dezelfde zin opnieuw, met de nieuwe snelheid, en gewoon doorlopen. */
+  herstart() {
+    if (!this.bezig) return;
+    this.speel(this.rij, this.opZin, this.naAfloop, Math.max(0, this.idx - 1));
+  },
+
+  /* één stuk tekst uitspreken */
+  zeg(tekst, na) {
+    if (!this.stem || !tekst) { if (na) na(); return false; }
+    const u = new SpeechSynthesisUtterance(tekst);
+    u.voice = this.stem;
+    u.lang = this.stem.lang || 'ar';
+    u.rate = S.tempo || 0.9;
+    u.onend = () => { if (na) na(); };
+    u.onerror = () => { if (na) na(); };
+    speechSynthesis.speak(u);
+    return true;
+  },
+
+  /* een reeks zinnen achter elkaar, met terugkoppeling welke er klinkt */
+  speel(zinnen, opZin, naAfloop, vanaf) {
+    if (!this.stem) return;
+    this.leeg();
+    this.rij = zinnen; this.idx = vanaf || 0; this.bezig = true;
+    this.opZin = opZin; this.naAfloop = naAfloop;
+    const volgende = () => {
+      if (!this.bezig || this.idx >= this.rij.length) {
+        this.bezig = false;
+        if (this.opZin) this.opZin(-1);
+        if (this.naAfloop) this.naAfloop();
+        return;
+      }
+      const i = this.idx++;
+      if (this.opZin) this.opZin(i);
+      this.zeg(this.zinTekst(this.rij[i]), volgende);
+    };
+    volgende();
+  },
+};
+if (Stem.kan()) {
+  Stem.zoek();
+  /* de stemmenlijst komt op de meeste browsers pas even later binnen */
+  speechSynthesis.onvoiceschanged = () => { const had = !!Stem.stem; Stem.zoek(); if (!had && Stem.stem) teken(); };
+}
+
+/* een luidsprekerknopje voor één stuk tekst */
+function luidspreker(tekst, klasse) {
+  if (!Stem.stem) return null;
+  const b = el('button', 'spreek' + (klasse ? ' ' + klasse : ''), '&#9654;');
+  b.setAttribute('aria-label', 'Voorlezen');
+  b.title = 'Voorlezen';
+  b.onclick = ev => {
+    ev.stopPropagation();
+    Stem.stop();
+    Stem.zeg(tekst, null);
+  };
+  return b;
 }
 
 /* ---------------- detailpaneel ---------------- */
@@ -686,7 +829,11 @@ function toonWoord(ids, zin, wi, zinEl, wEl) {
     const e = lem(id); if (!e) continue;
     const d = el('div', 'deel');
     d.appendChild(el('div', 'kop', CATS[e.cat].lat + ' — ' + CATS[e.cat].ar));
-    d.appendChild(el('div', 'lemma-groot ar', esc(e.lemma)));
+    const lr = el('div', 'lemma-rij');
+    lr.appendChild(el('div', 'lemma-groot ar', esc(e.lemma)));
+    const lu = luidspreker(e.lemma);
+    if (lu) lr.appendChild(lu);
+    d.appendChild(lr);
     d.appendChild(el('div', 'lemma-nl', esc(e.nl)));
 
     const meta = el('div', 'meta');
@@ -836,6 +983,10 @@ function tekenZinnen() {
     ar.appendChild(s);
     ar.appendChild(document.createTextNode(' '));
   });
+  if (S.klaar) {
+    const lu = luidspreker(Stem.zinTekst(z), 'groot');
+    if (lu) { lu.innerHTML = '&#9654; Hoor de zin'; ar.appendChild(document.createElement('br')); ar.appendChild(lu); }
+  }
   kaart.appendChild(ar);
   blad.appendChild(kaart);
 
@@ -1365,7 +1516,7 @@ function pasWeergaveToe() {
 
 function stelWeergaveIn(veld, waarde) {
   S[veld] = waarde;
-  localStorage.setItem('qirat.weergave', JSON.stringify({ zoom: S.zoom, donker: S.donker }));
+  localStorage.setItem('qirat.weergave', JSON.stringify({ zoom: S.zoom, donker: S.donker, tempo: S.tempo }));
   pasWeergaveToe();
 }
 
@@ -1373,6 +1524,8 @@ function stelWeergaveIn(veld, waarde) {
 try {
   const wg = JSON.parse(localStorage.getItem('qirat.weergave') || '{}');
   S.zoom = wg.zoom || 1; S.donker = !!wg.donker;
+  /* wg.traag komt uit de vorige versie: die knop had twee standen */
+  S.tempo = wg.tempo || (wg.traag ? 0.6 : 0.9);
 } catch (e) { /* eerste keer */ }
 
 document.getElementById('btnIn').onclick =
