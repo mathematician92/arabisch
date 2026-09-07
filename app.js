@@ -69,6 +69,24 @@ const Opslag = {
   },
 };
 const SLEUTEL = 'qirat.v2.lokaal';
+const WIE = 'qirat.wie';   // wie er op dit apparaat het laatst inlogde
+
+function pak() {
+  return {
+    gekend: [...S.gekend], afgerond: [...S.afgerond], oefen: S.oefen, hints: S.hints,
+    moeilijk: [...S.moeilijk], gelezen: [...S.gelezen], score: S.score,
+    boek: S.boek, les: S.les, bijgewerkt: Date.now(),
+  };
+}
+function zet(r) {
+  S.gekend = new Set(r.gekend || []);
+  S.afgerond = new Set(r.afgerond || []);
+  S.oefen = r.oefen || {};
+  S.hints = r.hints || {};
+  S.moeilijk = new Set(r.moeilijk || []);
+  S.gelezen = new Set(r.gelezen || []);
+  S.score = r.score || {};
+}
 
 function laad() {
   try {
@@ -78,21 +96,218 @@ function laad() {
       const oud = localStorage.getItem('qirat.v1');
       if (oud) Object.assign(r, JSON.parse(oud));
     }
-    S.gekend = new Set(r.gekend || []);
-    S.afgerond = new Set(r.afgerond || []);
-    S.oefen = r.oefen || {};
-    S.hints = r.hints || {};
-    S.moeilijk = new Set(r.moeilijk || []);
-    S.gelezen = new Set(r.gelezen || []);
-    S.score = r.score || {};
+    zet(r);
   } catch (e) { /* eerste keer */ }
 }
 function bewaar() {
-  Opslag.schrijf({
-    gekend: [...S.gekend], afgerond: [...S.afgerond], oefen: S.oefen, hints: S.hints,
-    moeilijk: [...S.moeilijk], gelezen: [...S.gelezen], score: S.score,
-    boek: S.boek, les: S.les,
+  Opslag.schrijf(pak());
+  Wolk.plan();          /* lokaal meteen, online zo dadelijk */
+}
+
+/* ---------------- samenvoegen ----------------
+   Twee apparaten kunnen allebei iets hebben geleerd sinds de laatste keer.
+   Voortgang groeit vrijwel altijd alleen aan, dus verzamelingen worden
+   samengevoegd in plaats van overschreven: dan kan werk niet verdwijnen.
+   Alleen de moeilijke lijst kun je afvinken, daar telt de nieuwste versie. */
+function samenvoeg(a, b) {
+  if (!a || !Object.keys(a).length) return b || {};
+  if (!b || !Object.keys(b).length) return a;
+  const unie = (x, y) => [...new Set([...(x || []), ...(y || [])])];
+  const nieuwste = (b.bijgewerkt || 0) >= (a.bijgewerkt || 0) ? b : a;
+  /* per les de hoogste telling aanhouden */
+  const hoogste = (x, y) => {
+    const uit = {};
+    for (const k of new Set([...Object.keys(x || {}), ...Object.keys(y || {})])) {
+      const p = (x || {})[k], q = (y || {})[k];
+      if (typeof p === 'object' && typeof q === 'object') {
+        uit[k] = {};
+        for (const j of new Set([...Object.keys(p || {}), ...Object.keys(q || {})])) {
+          uit[k][j] = Math.max((p || {})[j] || 0, (q || {})[j] || 0);
+        }
+      } else uit[k] = (typeof q === 'undefined') ? p : (typeof p === 'undefined') ? q : Math.max(p, q);
+    }
+    return uit;
+  };
+  return {
+    gekend: unie(a.gekend, b.gekend),
+    afgerond: unie(a.afgerond, b.afgerond),
+    gelezen: unie(a.gelezen, b.gelezen),
+    moeilijk: nieuwste.moeilijk || [],
+    score: hoogste(a.score, b.score),
+    hints: hoogste(a.hints, b.hints),
+    oefen: Object.assign({}, a.oefen, b.oefen),
+    boek: nieuwste.boek, les: nieuwste.les,
+    bijgewerkt: Math.max(a.bijgewerkt || 0, b.bijgewerkt || 0),
+  };
+}
+
+/* ---------------- de wolk ----------------
+   Eén document per persoon, op `voortgang/{uid}`. De app werkt zonder dit
+   alles gewoon door: valt het netwerk weg, dan blijft localStorage de
+   waarheid en gaat het bij de volgende keer alsnog omhoog. */
+const Wolk = {
+  klaar: false,       // ingelogd en verbonden
+  auth: null, db: null, doc: null, naam: null,
+  tijd: null, bezig: false,
+
+  ingesteld() {
+    return typeof firebase !== 'undefined' && window.FB_CONFIG &&
+           window.FB_CONFIG.apiKey && window.FB_CONFIG.apiKey.indexOf('VUL-IN') !== 0;
+  },
+
+  staat(soort, tekst) {
+    const e = document.getElementById('wolkStaat');
+    if (!e) return;
+    e.hidden = false;
+    e.className = 'wolk-staat ' + soort;
+    e.lastElementChild.textContent = tekst;
+    const u = document.getElementById('btnUitloggen');
+    if (u) u.hidden = !this.naam;
+  },
+
+  /* niet bij elke handeling schrijven: dat zijn honderden schrijfbewerkingen
+     per les. Hooguit eens per vier seconden, en bij het wegklikken. */
+  plan() {
+    if (!this.klaar) return;
+    clearTimeout(this.tijd);
+    this.tijd = setTimeout(() => this.duw(), 4000);
+  },
+
+  async duw() {
+    if (!this.klaar || this.bezig) return;
+    clearTimeout(this.tijd);
+    this.bezig = true;
+    this.staat('bezig', 'opslaan…');
+    try {
+      await this.db.collection('voortgang').doc(this.doc).set(pak());
+      this.staat('aan', this.naam + ' — bewaard');
+    } catch (e) {
+      this.staat('fout', 'niet opgeslagen (staat lokaal)');
+    }
+    this.bezig = false;
+  },
+
+  async haal() {
+    const d = await this.db.collection('voortgang').doc(this.doc).get();
+    return d.exists ? d.data() : {};
+  },
+
+  /* na het kiezen van een naam: lokaal en online bij elkaar leggen */
+  async begin(naam) {
+    this.naam = naam;
+    this.doc = naam.toLowerCase();
+    Opslag.gebruiker = this.doc;
+    localStorage.setItem(WIE, naam);
+    laad();                       /* wat op dit apparaat staat */
+    sluitInlog();
+    teken();
+    this.staat('bezig', 'ophalen…');
+    try {
+      const samen = samenvoeg(Opslag.lees(), await this.haal());
+      zet(samen);
+      Opslag.schrijf(samen);
+      this.klaar = true;
+      /* stond je op een ander apparaat in een andere les, ga daar dan heen */
+      if (samen.boek && S.index.boeken.some(b => b.id === samen.boek)) {
+        if (!S.lessen[samen.boek + '-' + samen.les] && !window.__DATA__) {
+          try { await laadLes(samen.boek, samen.les); } catch (e) { /* dan blijf je hier */ }
+        }
+        if (S.lessen[samen.boek + '-' + samen.les]) { S.boek = samen.boek; S.les = samen.les; }
+      }
+      teken();
+      await this.duw();
+    } catch (e) {
+      this.klaar = false;
+      this.staat('fout', 'geen verbinding — alleen dit apparaat');
+    }
+  },
+
+  start() {
+    if (!this.ingesteld()) return false;
+    try {
+      firebase.initializeApp(window.FB_CONFIG);
+      this.auth = firebase.auth();
+      this.db = firebase.firestore();
+    } catch (e) { return false; }
+    this.auth.onAuthStateChanged(u => {
+      /* De aanmelding is anoniem en dient alleen om de database te mogen
+         benaderen; wie je bent bepaalt de naam die je aantikt. */
+      if (!u) return;
+      const wie = localStorage.getItem(WIE);
+      if (wie) this.begin(wie); else toonInlog();
+    });
+    this.auth.signInAnonymously().catch(() => {
+      this.klaar = false;
+      this.staat('fout', 'geen verbinding — alleen dit apparaat');
+      toonInlog();
+    });
+    /* bij het wegklikken nog even wegschrijven wat open staat */
+    addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && this.klaar) this.duw();
+    });
+    return true;
+  },
+
+  /* van persoon wisselen: de anonieme aanmelding blijft staan, alleen de
+     keuze van dit apparaat wordt vergeten */
+  async uit() {
+    await this.duw();
+    this.klaar = false; this.doc = null; this.naam = null;
+    localStorage.removeItem(WIE);
+    location.reload();
+  },
+};
+
+/* ---------------- naamkeuze ----------------
+   Geen wachtwoorden: twee knoppen. De keuze blijft op dit apparaat staan,
+   dus je doet dit één keer per telefoon, laptop of tablet. */
+
+function sluitInlog() {
+  const o = document.getElementById('inlogScherm');
+  if (o) o.remove();
+}
+
+function toonInlog() {
+  if (document.getElementById('inlogScherm')) return;
+  const mensen = window.FB_MENSEN || [];
+  const o = el('div', 'inlog');
+  o.id = 'inlogScherm';
+  const doos = el('div', 'inlog-doos');
+  doos.appendChild(el('h1', null, 'قِرَاءَة'));
+  doos.appendChild(el('p', null,
+    'Wie leest er? Je hoeft dit maar één keer per apparaat te kiezen.'));
+
+  const namen = el('div', 'inlog-namen');
+  const fout = el('div', 'inlog-fout');
+  mensen.forEach(naam => {
+    const b = el('button', 'inlog-naam', esc(naam));
+    b.onclick = () => {
+      if (!Wolk.auth) {          /* zonder verbinding toch verder kunnen */
+        Opslag.gebruiker = String(naam).toLowerCase();
+        localStorage.setItem(WIE, naam);
+        laad(); sluitInlog(); teken();
+        Wolk.staat('fout', naam + ' — alleen dit apparaat');
+        return;
+      }
+      namen.querySelectorAll('button').forEach(k => { k.disabled = true; });
+      b.classList.add('aan');
+      Wolk.begin(naam);
+    };
+    namen.appendChild(b);
   });
+  doos.appendChild(namen);
+  doos.appendChild(fout);
+
+  const los = el('button', 'inlog-los', 'Nu even zonder — alleen op dit apparaat');
+  los.onclick = () => {
+    Opslag.gebruiker = 'lokaal';
+    laad(); sluitInlog(); teken();
+    Wolk.staat('fout', 'geen naam gekozen — alleen dit apparaat');
+  };
+  doos.appendChild(los);
+
+  o.appendChild(doos);
+  document.body.appendChild(o);
 }
 
 /* ---------------- hulpjes ---------------- */
@@ -1170,17 +1385,24 @@ document.addEventListener('keydown', e => {
 });
 
 document.getElementById('btnExport').onclick = () => {
-  const b = new Blob([localStorage.getItem(SLEUTEL) || '{}'], { type: 'application/json' });
+  const b = new Blob([localStorage.getItem(Opslag.sleutel()) || '{}'], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(b);
-  a.download = 'qirat-voortgang.json'; a.click();
+  a.download = 'qirat-voortgang-' + Opslag.gebruiker + '.json'; a.click();
 };
-document.getElementById('btnWis').onclick = () => {
-  if (!confirm('Alle voortgang wissen?')) return;
-  localStorage.removeItem(SLEUTEL);
+document.getElementById('btnWis').onclick = async () => {
+  if (!confirm('Alle voortgang wissen?' +
+      (Wolk.klaar ? '\n\nOok online, en dus op al je apparaten.' : ''))) return;
+  localStorage.removeItem(Opslag.sleutel());
   S.gekend = new Set(); S.afgerond = new Set(); S.moeilijk = new Set();
   S.gelezen = new Set(); S.geklikt = new Set(); S.oefen = {}; S.score = {}; S.hints = {};
+  /* ook online leegmaken: anders zet het samenvoegen alles zo weer terug */
+  if (Wolk.klaar) { clearTimeout(Wolk.tijd); await Wolk.duw(); }
   teken();
+};
+
+document.getElementById('btnUitloggen').onclick = () => {
+  if (confirm('Uitloggen op dit apparaat?')) Wolk.uit();
 };
 
 (async function start() {
@@ -1200,6 +1422,9 @@ document.getElementById('btnWis').onclick = () => {
       S.lemmas = wo.lemmas;
       S.woordenboek = wo.woordenboek || {};
     }
+    /* wie hier het laatst inlogde, zodat de juiste voortgang meteen staat */
+    const wie = localStorage.getItem(WIE);
+    if (wie) Opslag.gebruiker = wie.toLowerCase();
     laad();
     const r = Opslag.lees();
     if (r.boek && S.index.boeken.some(b => b.id === r.boek)) S.boek = r.boek;
@@ -1209,6 +1434,8 @@ document.getElementById('btnWis').onclick = () => {
     S.les = start;
     pasWeergaveToe();
     teken();
+    /* pas nu de wolk: de app staat er al, ingelogd of niet */
+    if (!Wolk.start()) Wolk.staat('fout', 'niet gekoppeld — alleen dit apparaat');
   } catch (e) {
     document.getElementById('main').innerHTML =
       '<div class="blad"><div class="fout">Kon de gegevens niet laden: ' + esc(e.message) +
