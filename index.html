@@ -457,6 +457,11 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
   padding:0 12px;height:36px;background:var(--card);white-space:nowrap
 }
 .kop-knop:hover{color:var(--rubric);border-color:var(--rubric)}
+.wie-knop::after{content:" ▾";color:var(--ink-2)}
+.wie-knop{color:var(--ink);border-color:var(--carry)}
+.wie-knop:hover::after{color:var(--rubric)}
+.inlog-terug{margin-top:18px;font-size:12.5px;color:var(--ink-2);text-decoration:underline}
+.inlog-terug:hover{color:var(--rubric)}
 .kop-knop.aan{background:var(--ink);color:var(--card);border-color:var(--ink)}
 .wi-balk{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px}
 .wi-balk input{flex:1 1 170px;width:auto;min-width:0}
@@ -539,6 +544,7 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
     <select class="les-kies boek-kies" id="boekKies" aria-label="Kies een boek" style="display:none"></select>
     <nav class="les-tabs" id="lesTabs"></nav>
     <select class="les-kies" id="lesKies" aria-label="Kies een les"></select>
+    <button class="kop-knop wie-knop" id="btnWie" hidden></button>
     <button class="kop-knop" id="btnIndex">Mijn woorden</button>
     <div class="weergave">
       <button id="btnUit" title="Kleiner" aria-label="Tekst kleiner">A−</button>
@@ -571,7 +577,6 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
   <button id="btnExport">Voortgang opslaan als bestand</button>
   <button id="btnWis">Alles wissen</button>
   <span class="wolk-staat" id="wolkStaat" hidden><i></i><span></span></span>
-  <button id="btnUitloggen" hidden>Ander persoon</button>
 </footer>
 
 <!-- ============================================================

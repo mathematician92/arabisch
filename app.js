@@ -161,8 +161,8 @@ const Wolk = {
     e.hidden = false;
     e.className = 'wolk-staat ' + soort;
     e.lastElementChild.textContent = tekst;
-    const u = document.getElementById('btnUitloggen');
-    if (u) u.hidden = !this.naam;
+    const u = document.getElementById('btnWie');
+    if (u) { u.hidden = !this.naam; u.textContent = this.naam || ''; }
   },
 
   /* niet bij elke handeling schrijven: dat zijn honderden schrijfbewerkingen
@@ -248,13 +248,30 @@ const Wolk = {
     return true;
   },
 
-  /* van persoon wisselen: de anonieme aanmelding blijft staan, alleen de
-     keuze van dit apparaat wordt vergeten */
-  async uit() {
-    await this.duw();
+  /* Van persoon wisselen op een gedeeld apparaat. Eerst het werk van de
+     vorige veilig wegschrijven, dan met een schone lei de ander inladen.
+     Geen herlaadbeurt: dat kost op de tablet seconden en is niet nodig. */
+  async wissel(naam) {
+    clearTimeout(this.tijd);
+    if (this.klaar) { try { await this.duw(); } catch (e) { /* staat lokaal */ } }
+    else bewaar();
     this.klaar = false; this.doc = null; this.naam = null;
-    localStorage.removeItem(WIE);
-    location.reload();
+
+    zet({});                       /* alles leeg voor de volgende */
+    S.geklikt = new Set();
+    S.oefenIdx = {}; S.vraag = null; S.antwoord = null;
+    S.stap = 0; S.zin = 0; S.open = 0; S.klaar = false; S.scherm = 'les';
+
+    localStorage.setItem(WIE, naam);
+    if (this.auth) {
+      await this.begin(naam);
+    } else {
+      this.naam = naam;
+      Opslag.gebruiker = String(naam).toLowerCase();
+      laad(); sluitInlog(); teken();
+      this.staat('fout', naam + ' — alleen dit apparaat');
+    }
+    window.scrollTo(0, 0);
   },
 };
 
@@ -270,41 +287,42 @@ function sluitInlog() {
 function toonInlog() {
   if (document.getElementById('inlogScherm')) return;
   const mensen = window.FB_MENSEN || [];
+  const nu = Wolk.naam;                 /* al iemand bezig? dan is dit wisselen */
   const o = el('div', 'inlog');
   o.id = 'inlogScherm';
   const doos = el('div', 'inlog-doos');
   doos.appendChild(el('h1', null, 'قِرَاءَة'));
-  doos.appendChild(el('p', null,
-    'Wie leest er? Je hoeft dit maar één keer per apparaat te kiezen.'));
+  doos.appendChild(el('p', null, nu
+    ? 'Wie gaat er verder? Het werk van ' + esc(nu) + ' is opgeslagen.'
+    : 'Wie leest er? Je kunt hier altijd wisselen.'));
 
   const namen = el('div', 'inlog-namen');
-  const fout = el('div', 'inlog-fout');
   mensen.forEach(naam => {
-    const b = el('button', 'inlog-naam', esc(naam));
+    const b = el('button', 'inlog-naam' + (naam === nu ? ' aan' : ''), esc(naam));
     b.onclick = () => {
-      if (!Wolk.auth) {          /* zonder verbinding toch verder kunnen */
-        Opslag.gebruiker = String(naam).toLowerCase();
-        localStorage.setItem(WIE, naam);
-        laad(); sluitInlog(); teken();
-        Wolk.staat('fout', naam + ' — alleen dit apparaat');
-        return;
-      }
       namen.querySelectorAll('button').forEach(k => { k.disabled = true; });
       b.classList.add('aan');
-      Wolk.begin(naam);
+      if (naam === nu) { sluitInlog(); return; }   /* toch dezelfde */
+      Wolk.wissel(naam);
     };
     namen.appendChild(b);
   });
   doos.appendChild(namen);
-  doos.appendChild(fout);
+  doos.appendChild(el('div', 'inlog-fout'));
 
-  const los = el('button', 'inlog-los', 'Nu even zonder — alleen op dit apparaat');
-  los.onclick = () => {
-    Opslag.gebruiker = 'lokaal';
-    laad(); sluitInlog(); teken();
-    Wolk.staat('fout', 'geen naam gekozen — alleen dit apparaat');
-  };
-  doos.appendChild(los);
+  if (nu) {
+    const terug = el('button', 'inlog-terug', 'Terug naar de les');
+    terug.onclick = sluitInlog;
+    doos.appendChild(terug);
+  } else {
+    const los = el('button', 'inlog-los', 'Nu even zonder — alleen op dit apparaat');
+    los.onclick = () => {
+      Opslag.gebruiker = 'lokaal';
+      laad(); sluitInlog(); teken();
+      Wolk.staat('fout', 'geen naam gekozen — alleen dit apparaat');
+    };
+    doos.appendChild(los);
+  }
 
   o.appendChild(doos);
   document.body.appendChild(o);
@@ -1401,9 +1419,7 @@ document.getElementById('btnWis').onclick = async () => {
   teken();
 };
 
-document.getElementById('btnUitloggen').onclick = () => {
-  if (confirm('Uitloggen op dit apparaat?')) Wolk.uit();
-};
+document.getElementById('btnWie').onclick = () => toonInlog();
 
 (async function start() {
   try {
