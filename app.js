@@ -21,6 +21,7 @@ const S = {
   fout: '',
   zoom: 1,         // tekstgrootte van de Arabische tekst
   tempo: 0.9,      // voorleessnelheid
+  stemnaam: '',    // zelf gekozen stem, leeg = de app kiest
   donker: false,   // donkere modus
   vraag: null,     // huidige oefenvraag
   antwoord: null,  // gegeven antwoord
@@ -469,7 +470,29 @@ function tekenKop() {
   });
   const bi = document.getElementById('btnIndex');
   if (bi) bi.classList.toggle('aan', S.scherm === 'lijst');
+  meetKop();
 }
+
+/* De kop is sticky en valt op een smal scherm over meerdere regels. De
+   voorleesbalk moet er precies onder blijven hangen, dus de hoogte wordt
+   opgemeten in plaats van geraden. */
+function meetKop() {
+  const h = document.querySelector('header');
+  if (!h) return;
+  const hoog = h.offsetHeight;
+  /* nul betekent: nog niet opgebouwd. Dan liever de reservewaarde uit de CSS
+     laten staan dan de balk onder de kop laten wegglijden. */
+  if (hoog > 0) document.documentElement.style.setProperty('--kop-h', hoog + 'px');
+}
+if (typeof ResizeObserver !== 'undefined') {
+  const ro = new ResizeObserver(meetKop);
+  addEventListener('DOMContentLoaded', () => {
+    const h = document.querySelector('header');
+    if (h) ro.observe(h);
+  });
+}
+addEventListener('resize', meetKop);
+addEventListener('orientationchange', meetKop);
 
 /* ---------------- woordenlijst ---------------- */
 function kaartVan(id, restMap) {
@@ -652,30 +675,62 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
     /* De brontekst zet elke zin op een eigen regel; die indeling houden we aan. */
     if (z.regeleinde) t.appendChild(el('br'));
   });
-  blad.appendChild(t);
-
-  /* voorlezen: de hele tekst achter elkaar, met de zin die klinkt gemarkeerd */
-  if (Stem.stem) {
+  /* voorlezen: de hele tekst achter elkaar, met de zin die klinkt gemarkeerd.
+     De balk staat boven de tekst en blijft onder de kop plakken, zodat je
+     halverwege een lange les niet terug hoeft te scrollen om te stoppen. */
+  if (Stem.kan()) {
     const balk = el('div', 'leesbalk');
     const p = el('button', 'knop zacht', '&#9654; Lees de tekst voor');
-    const merk = i => {
+    const teller = el('span', 'leesbalk-teller');
+
+    /* `plek` is waar je bent, ook als er niets klinkt. Daardoor kun je met de
+       pijltjes een zin terug en dan vanaf daar verder laten lezen. */
+    let plek = 0;
+    const toon = i => {
+      plek = Math.max(0, Math.min(zinnen.length - 1, i));
       t.querySelectorAll('.zin.klinkt').forEach(z => z.classList.remove('klinkt'));
-      if (i >= 0) {
-        const z = t.querySelector('.zin[data-zin="' + i + '"]');
-        if (z) {
-          z.classList.add('klinkt');
-          if (z.scrollIntoView) z.scrollIntoView({ block: 'nearest' });
-        }
+      const z = t.querySelector('.zin[data-zin="' + plek + '"]');
+      if (z) {
+        z.classList.add('klinkt');
+        if (z.scrollIntoView) z.scrollIntoView({ block: 'nearest' });
       }
+      teller.textContent = 'zin ' + (plek + 1) + ' / ' + zinnen.length;
     };
-    const uit = () => { p.innerHTML = '&#9654; Lees de tekst voor'; p.classList.remove('bezig'); };
+    const merk = i => { if (i >= 0) toon(i); };
+    const aan = () => { p.innerHTML = '&#9632; Stop'; p.classList.add('bezig'); };
+    const uit = voltooid => {
+      p.innerHTML = '&#9654; Lees de tekst voor';
+      p.classList.remove('bezig');
+      if (voltooid) toon(0);      /* helemaal uit: weer klaar voor de eerste zin */
+    };
+    /* vanaf de huidige zin lezen, of daarheen springen als hij al bezig is */
+    const vanaf = i => {
+      toon(i);
+      if (Stem.bezig) Stem.speel(zinnen, merk, uit, plek);
+    };
+    const lees = () => { aan(); Stem.speel(zinnen, merk, uit, plek); };
+
     p.onclick = () => {
       if (Stem.bezig) { Stem.stop(); return; }
-      p.innerHTML = '&#9632; Stop';
-      p.classList.add('bezig');
-      Stem.speel(zinnen, merk, uit);
+      lees();
     };
     balk.appendChild(p);
+
+    /* terug, opnieuw, verder */
+    const nav = el('div', 'leesbalk-nav');
+    const stap = (teken_, titel, fn) => {
+      const b = el('button', 'wi-kn', teken_);
+      b.title = titel; b.setAttribute('aria-label', titel);
+      b.onclick = fn;
+      nav.appendChild(b);
+      return b;
+    };
+    stap('&#9664;&#9664;', 'Vorige zin', () => vanaf(plek - 1));
+    stap('&#8635;', 'Deze zin opnieuw, en verder lezen', () => { aan(); Stem.speel(zinnen, merk, uit, plek); });
+    stap('&#9654;&#9654;', 'Volgende zin', () => vanaf(plek + 1));
+    balk.appendChild(nav);
+    balk.appendChild(teller);
+    teller.textContent = 'zin 1 / ' + zinnen.length;
     balk.appendChild(el('label', 'leesbalk-label', 'Tempo'));
     const tk = el('select', 'oefen-kies tempo-kies');
     tk.setAttribute('aria-label', 'Voorleessnelheid');
@@ -691,9 +746,31 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
       Stem.herstart();          /* klinkt er iets, dan meteen op de nieuwe snelheid */
     };
     balk.appendChild(tk);
-    balk.appendChild(el('span', 'leesbalk-stem', esc(Stem.stem.name)));
+    /* welke stem er spreekt, en de mogelijkheid om te wisselen */
+    const sk = el('select', 'oefen-kies stem-kies');
+    sk.setAttribute('aria-label', 'Stem');
+    if (!Stem.lijst.length) {
+      balk.appendChild(el('span', 'leesbalk-uitleg',
+        'Dit toestel heeft nog geen stemmen geladen. Ververs de pagina; blijft het leeg, dan heeft de browser er geen.'));
+      p.disabled = true;
+    } else {
+      for (const v of Stem.lijst) {
+        const o = document.createElement('option');
+        o.value = v.name;
+        o.textContent = v.name + ' (' + v.lang + ')';
+        if (Stem.stem && v.name === Stem.stem.name) o.selected = true;
+        sk.appendChild(o);
+      }
+      sk.onchange = () => Stem.kies(sk.value);
+      balk.appendChild(sk);
+      if (!Stem.arabisch.length) {
+        balk.appendChild(el('span', 'leesbalk-uitleg',
+          'Geen Arabische stem op dit toestel — installeer er een, of kies er hierboven zelf een.'));
+      }
+    }
     blad.appendChild(balk);
   }
+  blad.appendChild(t);
   return blad;
 }
 
@@ -705,18 +782,35 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
    geen Arabische stem, dan verschijnen de knoppen gewoon niet. */
 const TEMPOS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.25, 1.5];
 const Stem = {
-  lijst: [], stem: null, rij: [], idx: 0, bezig: false,
+  lijst: [], arabisch: [], stem: null, rij: [], idx: 0, bezig: false,
+  beurt: 0,           // elke leesronde krijgt een nummer, zie speel()
   opZin: null, naAfloop: null,
 
   kan() { return typeof speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined'; },
 
+  /* Alle stemmen van het toestel, de Arabische bovenaan. Ze staan er allemaal
+     bij omdat sommige systemen de taal verkeerd labelen — dan kun je er zelf
+     een aanwijzen in plaats van dat de knop stilzwijgend wegblijft. */
   zoek() {
     if (!this.kan()) return;
-    this.lijst = speechSynthesis.getVoices().filter(v => /^ar(-|_|$)/i.test(v.lang));
+    const alle = speechSynthesis.getVoices() || [];
+    const isAr = v => /^ar(-|_|$)/i.test(v.lang || '');
+    this.arabisch = alle.filter(isAr);
+    this.lijst = this.arabisch.concat(alle.filter(v => !isAr(v)));
     /* de betere stemmen eerst: Apple's Maged en Google's ar-XA klinken
        een stuk natuurlijker dan de standaardkeuze */
     const beter = /maged|tarik|laila|hoda|majed|enhanced|premium|natural|google/i;
-    this.stem = this.lijst.find(v => beter.test(v.name)) || this.lijst[0] || null;
+    const bewaard = this.lijst.find(v => v.name === S.stemnaam);
+    this.stem = bewaard || this.arabisch.find(v => beter.test(v.name)) ||
+                this.arabisch[0] || null;
+  },
+
+  kies(naam) {
+    const v = this.lijst.find(x => x.name === naam);
+    if (!v) return;
+    this.stem = v;
+    stelWeergaveIn('stemnaam', naam);
+    this.herstart();
   },
 
   /* de losse woorden van een zin weer aan elkaar */
@@ -726,14 +820,14 @@ const Stem = {
 
   leeg() {
     this.rij = []; this.idx = 0; this.bezig = false;
+    this.beurt++;     /* alles wat nog van de vorige ronde binnenkomt is oud */
     if (this.kan()) { try { speechSynthesis.cancel(); } catch (e) { /* laat maar */ } }
   },
 
   stop() {
-    const oz = this.opZin, na = this.naAfloop;
+    const na = this.naAfloop;
     this.leeg();
-    if (oz) oz(-1);
-    if (na) na();
+    if (na) na(false);          /* met de hand gestopt: de plek blijft staan */
   },
 
   /* Het tempo van een zin die al klinkt kan niet halverwege veranderen.
@@ -745,10 +839,10 @@ const Stem = {
 
   /* één stuk tekst uitspreken */
   zeg(tekst, na) {
-    if (!this.stem || !tekst) { if (na) na(); return false; }
+    if (!tekst) { if (na) na(); return false; }
     const u = new SpeechSynthesisUtterance(tekst);
-    u.voice = this.stem;
-    u.lang = this.stem.lang || 'ar';
+    if (this.stem) u.voice = this.stem;
+    u.lang = (this.stem && this.stem.lang) || 'ar-SA';
     u.rate = S.tempo || 0.9;
     u.onend = () => { if (na) na(); };
     u.onerror = () => { if (na) na(); };
@@ -757,16 +851,22 @@ const Stem = {
   },
 
   /* een reeks zinnen achter elkaar, met terugkoppeling welke er klinkt */
+  /* `vanaf` is de zin waar begonnen wordt; zo kun je terugspringen en verder
+     lezen. Elke ronde krijgt een eigen nummer, want `speechSynthesis.cancel()`
+     laat de afgebroken zin op sommige browsers alsnog zijn einde melden — zonder
+     dat nummer zou die oude melding de nieuwe ronde vooruit duwen. */
   speel(zinnen, opZin, naAfloop, vanaf) {
-    if (!this.stem) return;
+    if (!this.kan()) return;
     this.leeg();
+    const mijn = this.beurt;
     this.rij = zinnen; this.idx = vanaf || 0; this.bezig = true;
     this.opZin = opZin; this.naAfloop = naAfloop;
     const volgende = () => {
+      if (mijn !== this.beurt) return;          /* van een vorige ronde */
       if (!this.bezig || this.idx >= this.rij.length) {
+        const voltooid = this.idx >= this.rij.length;
         this.bezig = false;
-        if (this.opZin) this.opZin(-1);
-        if (this.naAfloop) this.naAfloop();
+        if (this.naAfloop) this.naAfloop(voltooid);
         return;
       }
       const i = this.idx++;
@@ -784,7 +884,7 @@ if (Stem.kan()) {
 
 /* een luidsprekerknopje voor één stuk tekst */
 function luidspreker(tekst, klasse) {
-  if (!Stem.stem) return null;
+  if (!Stem.kan()) return null;
   const b = el('button', 'spreek' + (klasse ? ' ' + klasse : ''), '&#9654;');
   b.setAttribute('aria-label', 'Voorlezen');
   b.title = 'Voorlezen';
@@ -1516,7 +1616,7 @@ function pasWeergaveToe() {
 
 function stelWeergaveIn(veld, waarde) {
   S[veld] = waarde;
-  localStorage.setItem('qirat.weergave', JSON.stringify({ zoom: S.zoom, donker: S.donker, tempo: S.tempo }));
+  localStorage.setItem('qirat.weergave', JSON.stringify({ zoom: S.zoom, donker: S.donker, tempo: S.tempo, stemnaam: S.stemnaam }));
   pasWeergaveToe();
 }
 
@@ -1526,6 +1626,7 @@ try {
   S.zoom = wg.zoom || 1; S.donker = !!wg.donker;
   /* wg.traag komt uit de vorige versie: die knop had twee standen */
   S.tempo = wg.tempo || (wg.traag ? 0.6 : 0.9);
+  S.stemnaam = wg.stemnaam || '';
 } catch (e) { /* eerste keer */ }
 
 document.getElementById('btnIn').onclick =
