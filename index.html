@@ -545,25 +545,29 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 .wolk-staat.fout i{background:var(--rubric)}
 
 /* ---------- voorlezen ---------- */
-.leesbalk{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  /* blijft onder de kop hangen; --kop-h wordt in app.js opgemeten omdat
-     de kop op een smal scherm over meer regels valt */
+/* De bediening staat op de titelregel en blijft daar onder de kop hangen;
+   --kop-h wordt in app.js opgemeten, want de kop valt op een smal scherm
+   over meer regels. */
+.titelrij{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
   position:sticky;top:calc(var(--kop-h,58px) - 1px);z-index:30;
-  margin:0 calc(-1 * clamp(14px,3.5vw,22px)) 18px;
-  padding:10px clamp(14px,3.5vw,22px);
+  margin:0 calc(-1 * clamp(14px,3.5vw,22px)) 14px;
+  padding:8px clamp(14px,3.5vw,22px);
   background:var(--card);border-bottom:1px solid var(--line)
 }
-.leesbalk .knop.bezig{border-color:var(--rubric);color:var(--rubric)}
-.leesbalk-label{font-size:12px;color:var(--ink-2)}
-.leesbalk-nav{display:flex;gap:3px}
-.leesbalk-nav .wi-kn{min-width:42px;padding:0 8px;font-size:12px;letter-spacing:.02em}
-.leesbalk-los{font-size:11.5px;color:var(--ink-2);text-decoration:underline}
-.leesbalk-los:hover{color:var(--rubric)}
-.leesbalk-teller{font-size:11.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
-.tempo-kies{display:block;width:auto;margin-top:0;min-height:38px;padding:6px 30px 6px 10px;font-size:13px}
-.stem-kies{display:block;width:auto;max-width:230px;margin-top:0;min-height:38px;padding:6px 30px 6px 10px;font-size:12.5px}
-.leesbalk-uitleg{font-size:11.5px;color:var(--ink-2);flex:1 1 160px;line-height:1.45}
+.titelrij h2{margin:0;flex:1 1 auto;min-width:0}
+.leesbalk{display:flex;align-items:center;gap:3px;flex:0 0 auto}
+.leesbalk .wi-kn{
+  min-width:36px;height:34px;padding:0 8px;font-size:11px;
+  line-height:1;letter-spacing:.04em
+}
+.leesbalk .speelknop{min-width:42px;font-size:13px}
+.leesbalk .speelknop.bezig{border-color:var(--rubric);color:var(--rubric)}
+.leesbalk .wi-kn[disabled]{opacity:.35;cursor:default}
+.tempo-kies{
+  display:block;width:auto;margin:0 0 0 5px;min-height:34px;
+  padding:4px 26px 4px 8px;font-size:12px
+}
 .spreek{
   font-size:15px;line-height:1;color:var(--ink-2);
   min-width:32px;height:32px;border-radius:var(--r);flex:0 0 auto
@@ -576,7 +580,7 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 .spreek.groot:hover{border-color:var(--rubric)}
 .lemma-rij{display:flex;align-items:center;gap:8px}
 .lemma-rij .lemma-groot{flex:1 1 auto;min-width:0}
-.zin.klinkt{background:var(--merk-zacht,rgba(196,151,74,.16));border-radius:var(--r)}
+.zin.klinkt{background:var(--merk-vlak);border-radius:var(--r)}
 
 .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);border-top-color:var(--rubric);
       border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
