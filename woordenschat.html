@@ -672,7 +672,8 @@ const S = {
   stap: 0,
   gekend: new Set(),      // lemma-ids die je kent
   moeilijk: new Set(),    // lemma-ids die na de tweede lezing nog niet zaten
-  geklikt: new Set(),     // wat je in dit scherm hebt aangeklikt als onbekend
+  geklikt: new Set(),
+  geklikBij: '',   // bij welke les en stap het aangetikte hoort
   gelezen: new Set(),     // lesnummers waarvan stap 1 is afgerond
   afgerond: new Set(),    // lesnummers die je hebt afgerond
   oefen: {},              // {lesnr: [gegenereerde teksten]}
@@ -736,7 +737,13 @@ function pak() {
   return {
     gekend: [...S.gekend], afgerond: [...S.afgerond], oefen: S.oefen, hints: S.hints,
     moeilijk: [...S.moeilijk], gelezen: [...S.gelezen], score: S.score,
-    boek: S.boek, les: S.les, bijgewerkt: Date.now(),
+    boek: S.boek, les: S.les, stap: S.stap, bijgewerkt: Date.now(),
+    /* Wat je in stap 1 of 6 hebt aangetikt is nog niet vastgelegd — dat
+       gebeurt pas met de knop onderaan. Toch bewaren we het, met een merkje
+       erbij van welke les en welke stap het was, zodat een onderbroken
+       leesbeurt niet weg is als je de app sluit. Klopt het merkje niet met
+       waar je bent, dan gaat het bij het openen alsnog weg. */
+    geklikt: [...S.geklikt], geklikVoor: S.boek + '-' + S.les + '-' + S.stap,
   };
 }
 function zet(r) {
@@ -747,6 +754,13 @@ function zet(r) {
   S.moeilijk = new Set(r.moeilijk || []);
   S.gelezen = new Set(r.gelezen || []);
   S.score = r.score || {};
+  S.geklikt = new Set(r.geklikt || []);
+  S.geklikBij = r.geklikVoor || '';
+}
+
+/* het aangetikte hoort bij één les en één stap; ergens anders is het niet geldig */
+function keurGeklikt() {
+  if (S.geklikBij !== S.boek + '-' + S.les + '-' + S.stap) S.geklikt = new Set();
 }
 
 function laad() {
@@ -797,7 +811,9 @@ function samenvoeg(a, b) {
     score: hoogste(a.score, b.score),
     hints: hoogste(a.hints, b.hints),
     oefen: Object.assign({}, a.oefen, b.oefen),
-    boek: nieuwste.boek, les: nieuwste.les,
+    boek: nieuwste.boek, les: nieuwste.les, stap: nieuwste.stap,
+    /* een halve leesbeurt is van één apparaat: die van het nieuwste telt */
+    geklikt: nieuwste.geklikt || [], geklikVoor: nieuwste.geklikVoor || '',
     bijgewerkt: Math.max(a.bijgewerkt || 0, b.bijgewerkt || 0),
   };
 }
@@ -809,6 +825,8 @@ function samenvoeg(a, b) {
 const Wolk = {
   klaar: false,       // ingelogd en verbonden
   auth: null, db: null, doc: null, naam: null,
+  af: null,           // stopt het meeluisteren
+  laatst: 0,          // tijdstip van het laatste bericht dat we verwerkt hebben
   tijd: null, bezig: false,
 
   ingesteld() {
@@ -840,7 +858,9 @@ const Wolk = {
     this.bezig = true;
     this.staat('bezig', 'opslaan…');
     try {
-      await this.db.collection('voortgang').doc(this.doc).set(pak());
+      const data = pak();
+      this.laatst = data.bijgewerkt;      /* zodat onze eigen schrijfbeurt niet terugkaatst */
+      await this.db.collection('voortgang').doc(this.doc).set(data);
       this.staat('aan', this.naam + ' — bewaard');
     } catch (e) {
       this.staat('fout', 'niet opgeslagen (staat lokaal)');
@@ -851,6 +871,43 @@ const Wolk = {
   async haal() {
     const d = await this.db.collection('voortgang').doc(this.doc).get();
     return d.exists ? d.data() : {};
+  },
+
+  /* Meeluisteren: schrijft je telefoon iets weg, dan komt het hier vanzelf
+     binnen zonder dat je hoeft te verversen. Firestore stuurt alleen bij een
+     echte wijziging, dus dit kost een leesbewerking per keer — een paar
+     tientallen per dag. */
+  luister() {
+    if (!this.db || !this.doc) return;
+    if (this.af) { try { this.af(); } catch (e) { /* al los */ } this.af = null; }
+    this.af = this.db.collection('voortgang').doc(this.doc).onSnapshot(
+      moment => {
+        /* onze eigen schrijfbeurt kaatst terug: die slaan we over */
+        if (moment.metadata && moment.metadata.hasPendingWrites) return;
+        if (!moment.exists) return;
+        const op = moment.data();
+        if (!op || (op.bijgewerkt || 0) <= (this.laatst || 0)) return;
+        this.laatst = op.bijgewerkt;
+        this.binnen(op);
+      },
+      () => { /* verbinding weg: de gewone opslag loopt gewoon door */ });
+  },
+
+  /* Een bericht van een ander toestel verwerken. Alles wordt samengevoegd,
+     maar waar jíj op dit moment bent blijft staan: je wordt niet midden in
+     een les naar een andere les getrokken, en wat je nu aan het aantikken
+     bent gaat niet verloren. */
+  binnen(op) {
+    const boek = S.boek, les = S.les, stap = S.stap;
+    const eigen = S.geklikt.size ? [...S.geklikt] : null;
+    const eigenBij = S.geklikBij;
+    zet(samenvoeg(Opslag.lees(), op));
+    S.boek = boek; S.les = les; S.stap = stap;
+    if (eigen) { S.geklikt = new Set(eigen); S.geklikBij = eigenBij; }
+    else keurGeklikt();
+    Opslag.schrijf(pak());
+    teken();
+    this.staat('aan', this.naam + ' — bijgewerkt');
   },
 
   /* na het kiezen van een naam: lokaal en online bij elkaar leggen */
@@ -875,8 +932,11 @@ const Wolk = {
         }
         if (S.lessen[samen.boek + '-' + samen.les]) { S.boek = samen.boek; S.les = samen.les; }
       }
+      if (typeof samen.stap === 'number' && samen.stap >= 0 && samen.stap <= 5) S.stap = samen.stap;
+      keurGeklikt();
       teken();
       await this.duw();
+      this.luister();
     } catch (e) {
       this.klaar = false;
       this.staat('fout', 'geen verbinding — alleen dit apparaat');
@@ -914,6 +974,7 @@ const Wolk = {
      Geen herlaadbeurt: dat kost op de tablet seconden en is niet nodig. */
   async wissel(naam) {
     clearTimeout(this.tijd);
+    if (this.af) { try { this.af(); } catch (e) { /* al los */ } this.af = null; }
     if (this.klaar) { try { await this.duw(); } catch (e) { /* staat lokaal */ } }
     else bewaar();
     this.klaar = false; this.doc = null; this.naam = null;
@@ -2364,6 +2425,9 @@ document.getElementById('btnWie').onclick = () => toonInlog();
     const start = (r.les && lesLijst().some(l => l.nr === r.les)) ? r.les : (eerste || {}).nr;
     if (!window.__DATA__) await laadLes(S.boek, start);
     S.les = start;
+    /* op dezelfde stap terugkomen waar je was */
+    if (typeof r.stap === 'number' && r.stap >= 0 && r.stap <= 5) S.stap = r.stap;
+    keurGeklikt();
     pasWeergaveToe();
     teken();
     /* pas nu de wolk: de app staat er al, ingelogd of niet */
