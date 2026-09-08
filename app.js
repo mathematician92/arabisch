@@ -475,6 +475,20 @@ function splitsLes(nr) {
   return { nieuw, oud, bouw, herkomst, alle, telbaar: alle.filter(i => !isBouwsteen(i)) };
 }
 
+/* Boek 2 van Bayna Yadayk telt door in eigen lesnummers: onze les 3 is daar
+   الدرس (7). Dat nummer staat in de titel, dus we vissen het eruit voor het
+   keuzemenu. De klinkertekens gaan er eerst af (de spelling van الدَّرْسُ
+   wisselt), en Arabische cijfers worden omgezet zodat het menu één soort
+   cijfers toont. Boeken zonder zo'n nummer merken hier niets van. */
+const DARS = /الدرس\s*\(\s*([0-9\u0660-\u0669]+)\s*\)/;
+function darsNr(titel) {
+  const kaal = (titel || '').replace(/[\u064B-\u0652\u0670\u0640]/g, '');
+  const m = DARS.exec(kaal);
+  if (!m) return null;
+  return [...m[1]].map(c => (c >= '\u0660' && c <= '\u0669')
+    ? String(c.charCodeAt(0) - 0x0660) : c).join('');
+}
+
 /* ---------------- kop + stappen ---------------- */
 function tekenKop() {
   const naarLes = nr => gaNaar(S.boek, nr);
@@ -491,7 +505,9 @@ function tekenKop() {
   kies.innerHTML = '';
   for (const L of lesLijst()) {
     const o = document.createElement('option');
-    o.value = L.nr; o.textContent = 'Les ' + L.nr;
+    const d = darsNr(L.titel);
+    o.value = L.nr;
+    o.textContent = 'Les ' + L.nr + (d ? '  \u00B7  Dars ' + d : '');
     if (L.nr === S.les) o.selected = true;
     kies.appendChild(o);
   }
