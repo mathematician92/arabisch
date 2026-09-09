@@ -489,6 +489,18 @@ function darsNr(titel) {
     ? String(c.charCodeAt(0) - 0x0660) : c).join('');
 }
 
+/* De titel zoals hij in het keuzemenu hoort. Bij boek 2 staat het darsnummer
+   vooraan in de titel zelf; dat tonen we al apart, dus daar knippen we het
+   voorstuk eraf. De rest van de boeken heeft alleen een titel. */
+function lesKern(titel) {
+  const t = (titel || '').trim();
+  const dp = t.indexOf(':');
+  if (dp > 0 && DARS.test(t.slice(0, dp + 1).replace(/[\u064B-\u0652\u0670\u0640]/g, ''))) {
+    return t.slice(dp + 1).trim();
+  }
+  return t;
+}
+
 /* ---------------- kop + stappen ---------------- */
 function tekenKop() {
   const naarLes = nr => gaNaar(S.boek, nr);
@@ -507,7 +519,8 @@ function tekenKop() {
     const o = document.createElement('option');
     const d = darsNr(L.titel);
     o.value = L.nr;
-    o.textContent = 'Les ' + L.nr + (d ? '  \u00B7  Dars ' + d : '');
+    o.textContent = 'Les ' + L.nr + (d ? '  \u00B7  Dars ' + d : '') +
+                    (lesKern(L.titel) ? '  \u2014  ' + lesKern(L.titel) : '');
     if (L.nr === S.les) o.selected = true;
     kies.appendChild(o);
   }
@@ -552,6 +565,11 @@ function tekenKop() {
 /* De kop is sticky en valt op een smal scherm over meerdere regels. De
    voorleesbalk moet er precies onder blijven hangen, dus de hoogte wordt
    opgemeten in plaats van geraden. */
+function kopHoogte() {
+  const h = document.querySelector('header');
+  return h && h.offsetHeight ? h.offsetHeight : 58;
+}
+
 function meetKop() {
   const h = document.querySelector('header');
   if (!h) return;
@@ -1388,6 +1406,7 @@ function tekenMoeilijk() {
    gewone vergelijking volstaat — `localeCompare('ar')` is niet nodig.
    Het lidwoord blijft staan: strippen zou اِلْتَفَتَ (achtste stam) tot تفت
    maken, en dat is een ander woord. */
+let wiKijker = null;   // let op welke letter bovenaan staat
 const WI_DIA = /[\u064B-\u0652\u0670\u0640\u0653-\u065F\u06D6-\u06ED]/g;
 const ALFABET = [...'ابتثجحخدذرزسشصضطظعغفقكلمنهوي'];
 function sorteersleutel(s) {
@@ -1496,7 +1515,15 @@ function tekenIndex() {
     }
     const wortels = [...bak.keys()].filter(Boolean)
       .sort((a, b) => { const x = sorteersleutel(a), y = sorteersleutel(b); return x < y ? -1 : x > y ? 1 : 0; });
-    for (const w of wortels) groepen.push({ kop: [...w].join(' '), rijen: bak.get(w) });
+    /* De wortels staan op alfabet, dus de letterbalk werkt hier ook: hij
+       springt naar de eerste wortel die met die letter begint. */
+    let vorig = '';
+    for (const w of wortels) {
+      const c = sorteersleutel(w)[0] || '';
+      const eerste = ALFABET.includes(c) && c !== vorig;
+      if (eerste) vorig = c;
+      groepen.push({ kop: [...w].join(' '), rijen: bak.get(w), letter: eerste ? c : null });
+    }
     if (bak.has('')) groepen.push({ kop: 'zonder wortel', rijen: bak.get(''), plat: true });
   } else {
     const bak = new Map();
@@ -1509,21 +1536,25 @@ function tekenIndex() {
     if (bak.has('*')) groepen.push({ kop: 'overig', rijen: bak.get('*'), plat: true });
   }
 
-  /* ---- letterbalk om naartoe te springen ---- */
-  if (wi.op === 'woord') {
-    const lb = el('div', 'wi-letters');
-    for (const c of ALFABET) {
-      const g = groepen.findIndex(x => x.letter === c);
-      const b = el('button', null, c);
-      if (g < 0) b.disabled = true;
-      else b.onclick = () => {
-        const d = document.getElementById('wi-g' + g);
-        if (d) d.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      };
-      lb.appendChild(b);
-    }
-    blad.appendChild(lb);
+  /* ---- letterbalk ----
+     Blijft onder de kop hangen, zodat je van letter naar letter kunt zonder
+     eerst helemaal terug te scrollen. Achtentwintig knoppen passen op een
+     telefoon niet naast elkaar; in plaats van af te breken schuift de balk
+     zijwaarts, en hij schuift zelf mee naar de letter waar je bent. */
+  const lb = el('div', 'wi-letters');
+  const knoppen = {};
+  for (const c of ALFABET) {
+    const g = groepen.findIndex(x => x.letter === c);
+    const b = el('button', null, c);
+    knoppen[c] = b;
+    if (g < 0) b.disabled = true;
+    else b.onclick = () => {
+      const dv = document.getElementById('wi-g' + g);
+      if (dv && dv.scrollIntoView) dv.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
+    lb.appendChild(b);
   }
+  blad.appendChild(lb);
 
   /* ---- de lijst zelf ----
      In één keer als HTML-tekst opgebouwd en met één klikafhandelaar op de
@@ -1548,6 +1579,31 @@ function tekenIndex() {
     if (b) toonWoord([b.dataset.id], null, null, null, null);
   };
   blad.appendChild(wrap);
+
+  /* welke letter is in beeld? die lichten we op in de balk */
+  if (wiKijker) { wiKijker.disconnect(); wiKijker = null; }
+  if (typeof IntersectionObserver !== 'undefined') {
+    const bij = {};
+    groepen.forEach((g, i) => { if (g.letter) bij['wi-g' + i] = g.letter; });
+    const merkLetter = c => {
+      for (const k in knoppen) knoppen[k].classList.toggle('aan', k === c);
+      const b = knoppen[c];
+      if (b && b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'center' });
+    };
+    wiKijker = new IntersectionObserver(lijst => {
+      const raak = lijst.filter(x => x.isIntersecting);
+      if (!raak.length) return;
+      raak.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      const c = bij[raak[0].target.id];
+      if (c) merkLetter(c);
+    }, { rootMargin: '-' + (kopHoogte() + 56) + 'px 0px -80% 0px' });
+    setTimeout(() => {
+      for (const id in bij) {
+        const dv = document.getElementById(id);
+        if (dv) wiKijker.observe(dv);
+      }
+    }, 0);
+  }
   return blad;
 }
 
