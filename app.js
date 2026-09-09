@@ -515,14 +515,30 @@ function tekenKop() {
   /* op smalle schermen staan de lessen in een keuzemenu */
   const kies = document.getElementById('lesKies');
   kies.innerHTML = '';
+  /* Qasas loopt door van les 1 tot 74 maar bestaat uit vier verhalen. Staan
+     die in boeken.json, dan zetten we ze als kopjes boven hun lessen: de
+     browser toont zo'n kopje grijs en niet aanklikbaar, precies goed. */
+  const hfd = (S.index.boeken.find(b => b.id === S.boek) || {}).hoofdstukken || [];
+  let bak = kies, lopend = null;
   for (const L of lesLijst()) {
+    const h = hfd.find(x => L.nr >= x.van && L.nr <= x.tot);
+    if (h !== lopend) {
+      lopend = h;
+      if (h) {
+        bak = document.createElement('optgroup');
+        bak.label = h.titel;
+        kies.appendChild(bak);
+      } else {
+        bak = kies;
+      }
+    }
     const o = document.createElement('option');
     const d = darsNr(L.titel);
     o.value = L.nr;
     o.textContent = 'Les ' + L.nr + (d ? '  \u00B7  Dars ' + d : '') +
                     (lesKern(L.titel) ? '  \u2014  ' + lesKern(L.titel) : '');
     if (L.nr === S.les) o.selected = true;
-    kies.appendChild(o);
+    bak.appendChild(o);
   }
   kies.onchange = () => naarLes(Number(kies.value));
   /* boekkeuze verschijnt zodra er meer dan één boek is */
