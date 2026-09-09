@@ -77,32 +77,41 @@ header{
   border-bottom:1px solid var(--line);
   padding:env(safe-area-inset-top) 0 0;
 }
-.hwrap{max-width:900px;margin:0 auto;padding:10px clamp(12px,3.5vw,18px) 0;
-  display:flex;align-items:center;gap:clamp(8px,2vw,14px);flex-wrap:wrap}
+.hwrap{max-width:900px;margin:0 auto;padding:9px clamp(12px,3.5vw,18px) 0;
+  display:flex;align-items:center;gap:clamp(6px,2vw,12px);flex-wrap:wrap}
 /* Alle bediening op één regel: boek, les, wie je bent, Mijn woorden en de
    weergaveknoppen. Op een smal scherm mag de rij zijwaarts schuiven in plaats
    van af te breken; de titel ernaast krimpt mee en kapt desnoods af. */
+/* Op een tablet en breder past alles op één regel. Op een telefoon zijn dat
+   te veel dingen; daar komen boek en les op de eerste regel — dat is wat je
+   het vaakst nodig hebt — en de knoppen eronder. Niets schuift dus meer uit
+   beeld, want de boekkeuze was op een smal scherm niet meer te bereiken. */
 .bediening{
-  display:flex;align-items:center;gap:5px;flex:1 1 auto;flex-wrap:nowrap;
-  justify-content:flex-end;min-width:0;overflow-x:auto;overflow-y:hidden;
-  scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px
+  display:flex;align-items:center;gap:6px;flex:1 1 auto;flex-wrap:wrap;
+  justify-content:flex-end;min-width:0
 }
-.bediening::-webkit-scrollbar{display:none}
-.bediening > *{flex:0 0 auto}
+/* Let op de flex-basis. Een <select> is van zichzelf zo breed als zijn
+   langste optie, en sinds de lestitels erin staan is dat heel breed. Een
+   flexrij die mag afbreken kijkt naar díe breedte, niet naar wat het ding
+   ná krimpen wordt — dus dan sprong de knoppengroep naar een tweede regel.
+   Met basis 0 tellen de keuzemenu's alleen mee voor wat ze krijgen. */
+.kies-groep{display:flex;align-items:center;gap:6px;flex:1 1 220px;min-width:0}
+.kies-groep > select{flex:1 1 0;width:0;min-width:0}
+.kies-groep > .boek-kies{flex:0 1 42%}
+.knop-groep{display:flex;align-items:center;gap:5px;flex:0 0 auto;flex-wrap:nowrap}
+/* tablet en breder: alles op één regel, hoe smal de menu's ook worden */
+@media(min-width:700px){
+  .bediening{flex-wrap:nowrap}
+}
+@media(max-width:699px){
+  .kies-groep{flex:1 1 100%}
+  .knop-groep{flex:1 1 100%;justify-content:flex-end}
+}
 .brand{font-family:'Scheherazade New',serif;font-size:clamp(19px,4.6vw,27px);line-height:1.1;letter-spacing:0;
   flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brand small{
   display:block;font-family:'IBM Plex Sans';font-size:10px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--ink-2);margin-top:2px
-}
-.les-tabs{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
-.les-tabs button{
-  padding:5px clamp(9px,2.5vw,13px);font-size:13px;color:var(--ink-2);min-height:32px;
-  border:1px solid transparent;border-bottom:none;border-radius:var(--r) var(--r) 0 0;
-}
-.les-tabs button[aria-current="true"]{
-  background:var(--card);border-color:var(--line);color:var(--ink);font-weight:500;
-  margin-bottom:-1px;padding-bottom:6px
 }
 .gear{font-size:16px;color:var(--ink-2);padding:4px 8px}
 
@@ -429,19 +438,12 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
   background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;
   background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:32px
 }
-.les-kies{display:none;margin-left:0;max-width:230px}
-.boek-kies{display:none;margin-left:0;max-width:170px}
+.les-kies{display:block;margin-left:0;max-width:none}
+.boek-kies{display:none;margin-left:0;max-width:none}
 .oefen-kies{display:none;width:100%;margin-top:14px}
 @media(max-width:699px){
   .oefen-rij{display:none}
   .oefen-kies{display:block}
-}
-/* De lestabs zijn met 183 lessen alleen op een breed scherm nog te doen.
-   Tot en met de tablet dus het keuzemenu. Wil je ze ook op de laptop kwijt,
-   zet dit getal dan hoger; 4000px haalt ze overal weg. */
-@media(max-width:1200px){
-  .les-tabs{display:none}
-  .les-kies{display:block}
 }
 .weergave{display:flex;gap:2px;margin-left:3px;flex:0 0 auto}
 .weergave button{
@@ -619,17 +621,19 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 
 <header>
   <div class="hwrap">
-    <div class="brand ar"><span id="boekTitel">القراءة الراشدة</span><small class="nl-serif" style="font-family:'IBM Plex Sans'">Woordenschat</small></div>
-    <nav class="les-tabs" id="lesTabs"></nav>
     <div class="bediening">
-      <select class="les-kies boek-kies" id="boekKies" aria-label="Kies een boek" style="display:none"></select>
-      <select class="les-kies" id="lesKies" aria-label="Kies een les"></select>
+      <div class="kies-groep">
+        <select class="les-kies boek-kies" id="boekKies" aria-label="Kies een boek" style="display:none"></select>
+        <select class="les-kies" id="lesKies" aria-label="Kies een les"></select>
+      </div>
+      <div class="knop-groep">
       <button class="kop-knop wie-knop" id="btnWie" hidden></button>
       <button class="kop-knop" id="btnIndex">Mijn woorden</button>
       <div class="weergave">
         <button id="btnUit" title="Kleiner" aria-label="Tekst kleiner">A−</button>
         <button id="btnIn" title="Groter" aria-label="Tekst groter">A+</button>
         <button id="btnDonker" title="Donkere modus" aria-label="Donkere modus">☾</button>
+      </div>
       </div>
     </div>
   </div>

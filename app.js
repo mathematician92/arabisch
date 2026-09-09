@@ -501,32 +501,45 @@ function lesKern(titel) {
   return t;
 }
 
+/* Sommige boeken bestaan uit hoofdstukken terwijl de lessen doorgenummerd
+   zijn. Staat de indeling in boeken.json, dan zet de app kopjes in het
+   keuzemenu en begint de telling onder elk kopje weer bij 1. */
+function hoofdstukken() {
+  return (S.index.boeken.find(b => b.id === S.boek) || {}).hoofdstukken || [];
+}
+function hoofdstukVan(nr) {
+  return hoofdstukken().find(x => nr >= x.van && nr <= x.tot) || null;
+}
+/* 'Les 3' — binnen een hoofdstuk opnieuw geteld, anders gewoon het lesnummer */
+function lesKop() {
+  return 'Les ' + lesInHoofdstuk(S.les);
+}
+function hoofdstukLabel(h) {
+  return h.titel || ('Hoofdstuk ' + (h.nr || ''));
+}
+function lesInHoofdstuk(nr) {
+  const h = hoofdstukVan(nr);
+  return h ? nr - h.van + 1 : nr;
+}
+
 /* ---------------- kop + stappen ---------------- */
 function tekenKop() {
   const naarLes = nr => gaNaar(S.boek, nr);
-  const nav = document.getElementById('lesTabs');
-  nav.innerHTML = '';
-  for (const L of lesLijst()) {
-    const b = el('button', null, 'Les ' + L.nr);
-    b.setAttribute('aria-current', L.nr === S.les);
-    b.onclick = () => naarLes(L.nr);
-    nav.appendChild(b);
-  }
-  /* op smalle schermen staan de lessen in een keuzemenu */
+  /* De lessen staan overal in het keuzemenu. Een rij losse knopjes was met
+     183 lessen een muur van vijf regels in een kop die meescrollt. */
   const kies = document.getElementById('lesKies');
   kies.innerHTML = '';
   /* Qasas loopt door van les 1 tot 74 maar bestaat uit vier verhalen. Staan
      die in boeken.json, dan zetten we ze als kopjes boven hun lessen: de
      browser toont zo'n kopje grijs en niet aanklikbaar, precies goed. */
-  const hfd = (S.index.boeken.find(b => b.id === S.boek) || {}).hoofdstukken || [];
   let bak = kies, lopend = null;
   for (const L of lesLijst()) {
-    const h = hfd.find(x => L.nr >= x.van && L.nr <= x.tot);
+    const h = hoofdstukVan(L.nr);
     if (h !== lopend) {
       lopend = h;
       if (h) {
         bak = document.createElement('optgroup');
-        bak.label = h.titel;
+        bak.label = hoofdstukLabel(h);
         kies.appendChild(bak);
       } else {
         bak = kies;
@@ -535,7 +548,8 @@ function tekenKop() {
     const o = document.createElement('option');
     const d = darsNr(L.titel);
     o.value = L.nr;
-    o.textContent = 'Les ' + L.nr + (d ? '  \u00B7  Dars ' + d : '') +
+    /* binnen een hoofdstuk telt de app opnieuw vanaf 1 */
+    o.textContent = 'Les ' + lesInHoofdstuk(L.nr) + (d ? '  \u00B7  Dars ' + d : '') +
                     (lesKern(L.titel) ? '  \u2014  ' + lesKern(L.titel) : '');
     if (L.nr === S.les) o.selected = true;
     bak.appendChild(o);
@@ -1637,7 +1651,7 @@ function teken() {
 
   /* ---- stap 1: lezen en aanklikken ---- */
   if (S.stap === 0) {
-    const blad = tekenTekst(L.zinnen, L.niveau + ' — ' + L.titel,
+    const blad = tekenTekst(L.zinnen, lesKop() + ' — ' + L.titel,
 '', true);
     const tel = el('div', 'balk-tekst');
     tel.style.marginTop = '16px';
