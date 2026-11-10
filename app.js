@@ -394,6 +394,17 @@ function toonInlog() {
 const el = (t, k, h) => { const e = document.createElement(t); if (k) e.className = k; if (h != null) e.innerHTML = h; return e; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const les = n => S.lessen[S.boek + '-' + n] || null;
+/* Voortgang hoort bij een boek én een les: les 3 van het ene boek is een
+   andere tekst dan les 3 van het andere. Daarom is de sleutel 'boek-nr'. */
+const lesSleutel = () => S.boek + '-' + S.les;
+/* Vroeger stond de telling onder alleen het lesnummer. Die oude telling
+   nemen we één keer over zodra je de les weer opent; woorden die niet in
+   deze les voorkomen worden toch nooit gevraagd, dus dat kan geen kwaad. */
+function scoreVan() {
+  const k = lesSleutel();
+  if (!S.score[k]) S.score[k] = Object.assign({}, S.score[S.les] || {});
+  return S.score[k];
+}
 const lem = id => S.lemmas[id];
 const boekNu = () => S.index.boeken.find(b => b.id === S.boek);
 const lesLijst = () => (boekNu() || { lessen: [] }).lessen;
@@ -1191,7 +1202,7 @@ function tekenZinnen() {
   const zinnen = L.zinnen;
   const i = Math.min(S.zin, zinnen.length - 1);
   const z = zinnen[i];
-  const h = (S.hints[S.les] || {});
+  const h = (S.hints[lesSleutel()] || {});
 
   const blad = el('div', 'blad');
   blad.appendChild(el('h2', null, 'Zinnen zeggen — les ' + S.les));
@@ -1228,8 +1239,8 @@ function tekenZinnen() {
         S.open === 0 ? 'Geef het eerste woord' : 'Geef nog een woord');
       wk.onclick = () => {
         S.open++;
-        S.hints[S.les] = S.hints[S.les] || {};
-        S.hints[S.les][i] = S.open;
+        S.hints[lesSleutel()] = S.hints[lesSleutel()] || {};
+        S.hints[lesSleutel()][i] = S.open;
         bewaar(); teken();
       };
       a.appendChild(wk);
@@ -1329,7 +1340,7 @@ function tekenOefening() {
   const v = S.vraag;
   if (!v) { blad.appendChild(el('div', 'leeg', 'Geen vragen mogelijk.')); return blad; }
 
-  const goedTotaal = S.score[S.les] || {};
+  const goedTotaal = scoreVan();
   const af = pool.filter(i => (goedTotaal[i] || 0) >= 2).length;
   blad.appendChild(el('div', 'balk', `<i style="width:${Math.round(100 * af / pool.length)}%"></i>`));
   blad.appendChild(el('div', 'balk-tekst', `${af} van ${pool.length} woorden twee keer goed`));
@@ -1351,10 +1362,10 @@ function tekenOefening() {
     }
     b.onclick = () => {
       S.antwoord = o;
-      S.score[S.les] = S.score[S.les] || {};
-      const n = S.score[S.les][v.id] || 0;
-      S.score[S.les][v.id] = (o === v.goed) ? n + 1 : 0;
-      if (o === v.goed && S.score[S.les][v.id] >= 2) S.gekend.add(v.id);
+      const sc = scoreVan();
+      const n = sc[v.id] || 0;
+      sc[v.id] = (o === v.goed) ? n + 1 : 0;
+      if (o === v.goed && sc[v.id] >= 2) S.gekend.add(v.id);
       bewaar(); teken();
     };
     opts.appendChild(b);
@@ -1666,7 +1677,7 @@ function teken() {
         if (S.geklikt.has(id)) S.gekend.delete(id);
         else { S.gekend.add(id); S.moeilijk.delete(id); }
       }
-      S.gelezen.add(S.les); S.geklikt = new Set(); S.stap = 1;
+      S.gelezen.add(lesSleutel()); S.geklikt = new Set(); S.stap = 1;
       bewaar(); teken(); window.scrollTo(0, 0);
     };
     a.appendChild(b);
@@ -1692,7 +1703,7 @@ function teken() {
   /* ---- stap 4: vaste oefenteksten ---- */
   else if (S.stap === 3) {
     const vast = L.oefen || [];
-    const idx = Math.min(S.oefenIdx[S.les] || 0, Math.max(0, vast.length - 1));
+    const idx = Math.min(S.oefenIdx[lesSleutel()] || 0, Math.max(0, vast.length - 1));
     const blad = el('div', 'blad');
     blad.appendChild(el('h2', null, 'Oefenteksten'));
 
@@ -1708,7 +1719,7 @@ function teken() {
     vast.forEach((t, k) => {
       const b = el('button', 'oefen-knop' + (k === idx ? ' nu' : ''));
       b.innerHTML = `<span class="ok-nr">${k + 1}</span><span class="ok-titel">${esc(t.titel)}</span>`;
-      b.onclick = () => { S.oefenIdx[S.les] = k; teken(); window.scrollTo(0, 0); };
+      b.onclick = () => { S.oefenIdx[lesSleutel()] = k; teken(); window.scrollTo(0, 0); };
       rij.appendChild(b);
     });
     blad.appendChild(rij);
@@ -1720,7 +1731,7 @@ function teken() {
       if (k === idx) o.selected = true;
       kz.appendChild(o);
     });
-    kz.onchange = () => { S.oefenIdx[S.les] = Number(kz.value); teken(); window.scrollTo(0, 0); };
+    kz.onchange = () => { S.oefenIdx[lesSleutel()] = Number(kz.value); teken(); window.scrollTo(0, 0); };
     blad.appendChild(kz);
     m.appendChild(blad);
 
@@ -1754,7 +1765,7 @@ function teken() {
         if (S.geklikt.has(id)) { S.moeilijk.add(id); S.gekend.delete(id); }
         else { S.gekend.add(id); S.moeilijk.delete(id); }
       }
-      S.afgerond.add(S.les);
+      S.afgerond.add(lesSleutel());
       S.geklikt = new Set();
       const volg = lesLijst().find(l => l.nr === S.les + 1);
       bewaar();
