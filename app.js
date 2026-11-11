@@ -806,12 +806,23 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
         }
         toonWoord(w.ids, z, wi, span, s);
       };
+      /* w.a: dit woord sluit een vers af. Dan volgt het verseinde-teken van de
+         moshaf: in het lettertype KFGQPC Hafs tekenen de Arabische cijfers
+         zichzelf als het rondje met het versnummer erin. */
+      const aya = w.a ? el('span', 'aya',
+        '\u00A0' + String(w.a).replace(/\d/g, c => String.fromCharCode(0x0660 + Number(c)))) : null;
       if (w.ks) {
-        /* laatste woord, sluithaak en vindplaats blijven bij elkaar op de regel */
+        /* laatste woord, verseinde, sluithaak en vindplaats blijven bij elkaar */
         const slot = el('span', 'vers-eind');
         slot.appendChild(s);
+        if (aya) slot.appendChild(aya);
         slot.appendChild(el('span', 'haak', ' \uFD3E'));
         if (w.ref) slot.appendChild(el('span', 'versnr', ' ' + esc(w.ref)));
+        span.appendChild(slot);
+      } else if (aya) {
+        const slot = el('span', 'vers-eind');
+        slot.appendChild(s);
+        slot.appendChild(aya);
         span.appendChild(slot);
       } else {
         span.appendChild(s);
