@@ -832,7 +832,9 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
     if (z.eind) {
       /* het leesteken mag niet los naar de volgende regel springen */
       const l = span.lastChild;
-      if (l && l.nodeType === 3) l.textContent = '\u00A0';
+      /* De harde spatie staat in een eigen span met een gewone letter: in
+         Al-Mohanad zit op die plek een verkeerd teken (À). */
+      if (l && l.nodeType === 3) { span.removeChild(l); span.appendChild(el('span', 'nb', '\u00A0')); }
       span.appendChild(el('span', 'zin-eind', esc(z.eind) + ' '));
     }
     /* Een koranvers krijgt de haken ﴿ ﴾ eromheen en een eigen opmaak, zoals in
