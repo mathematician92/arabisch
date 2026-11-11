@@ -147,7 +147,10 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 120px}
 .w:hover{background:#EDEFE7}
 .w.gekend{color:var(--faded)}
 .w.onbekend{background:var(--merk-vlak);box-shadow:0 2px 0 var(--merk);border-radius:2px}
-.w.lastig{box-shadow:0 2px 0 var(--carry);border-radius:2px}
+/* display:inline staat er met opzet: verderop bestaat een .lastig voor de
+   lijst met lastige zinnen (display:flex), en die maakte van een lastig woord
+   in de tekst een blok over de hele regel. */
+.w.lastig{display:inline;box-shadow:0 2px 0 var(--carry);border-radius:2px}
 /* oefenteksten: zelfde inkt, alleen een dun amber streepje onder wat je nog leert */
 /* getallen en jaartallen: horen in de zin, maar zijn niets om te leren */
 .getal{opacity:.75}
