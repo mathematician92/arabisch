@@ -829,7 +829,12 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
       }
       span.appendChild(document.createTextNode(' '));
     });
-    if (z.eind) span.appendChild(el('span', 'zin-eind', esc(z.eind) + ' '));
+    if (z.eind) {
+      /* het leesteken mag niet los naar de volgende regel springen */
+      const l = span.lastChild;
+      if (l && l.nodeType === 3) l.textContent = '\u00A0';
+      span.appendChild(el('span', 'zin-eind', esc(z.eind) + ' '));
+    }
     /* Een koranvers krijgt de haken ﴿ ﴾ eromheen en een eigen opmaak, zoals in
        het bronmateriaal. De haken staan niet in de woordenlijst: ze horen bij
        de weergave, niet bij de tekst die je leert. */
