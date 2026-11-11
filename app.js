@@ -753,10 +753,15 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
   /* Het boek op het element zetten, zodat de opmaak per boek kan verschillen:
      elk leerboek heeft zijn eigen letterbeeld en dat mag de app volgen. */
   t.dataset.boek = S.boek;
+  /* Nieuwe data zegt per woord of het korantekst is (w.k), met begin (w.ko)
+     en eind (w.ks) van het stuk tussen haken. Dan zetten we de haken precies
+     om het vers; de oude vlag op de hele zin is alleen nog een terugval. */
+  const perWoord = zinnen.some(z => z.woorden.some(w => w.k));
   zinnen.forEach((z, zi) => {
     const span = el('span', 'zin');
     span.dataset.zin = zi;
     z.woorden.forEach((w, wi) => {
+      if (w.ko) span.appendChild(el('span', 'haak', '\uFD3F '));
       /* Een getal of jaartal: hoort in de zin maar is geen woord om te leren.
          Neutraal tonen, niet aanklikbaar, telt niet mee als 'nog te leren'. */
       if (!w.ids.length) {
@@ -780,11 +785,15 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
         (markeer
           ? (aan ? ' onbekend' : '') + (lastig && !aan ? ' lastig' : '')
           : (!gekend && !gl ? ' teleren' : '')) +
-        (gl ? ' geleend' : ''));
+        (gl ? ' geleend' : '') +
+        (w.k ? ' kw' : '') + (w.u ? ' ku' : ''));
+      /* w.u is de schrijfwijze van de moshaf; w.w blijft de gewone spelling,
+         voor het voorlezen en het opzoeken. */
+      const vorm = w.u || w.w;
       if (gl) {
-        s.innerHTML = `<span class="gw">${esc(w.w)}</span><span class="glos">${esc(gl.nl)}</span>`;
+        s.innerHTML = `<span class="gw">${esc(vorm)}</span><span class="glos">${esc(gl.nl)}</span>`;
       } else {
-        s.textContent = w.w;
+        s.textContent = vorm;
       }
       s.onclick = () => {
         if (markeer) {
@@ -797,14 +806,23 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
         }
         toonWoord(w.ids, z, wi, span, s);
       };
-      span.appendChild(s);
+      if (w.ks) {
+        /* laatste woord, sluithaak en vindplaats blijven bij elkaar op de regel */
+        const slot = el('span', 'vers-eind');
+        slot.appendChild(s);
+        slot.appendChild(el('span', 'haak', ' \uFD3E'));
+        if (w.ref) slot.appendChild(el('span', 'versnr', ' ' + esc(w.ref)));
+        span.appendChild(slot);
+      } else {
+        span.appendChild(s);
+      }
       span.appendChild(document.createTextNode(' '));
     });
     if (z.eind) span.appendChild(el('span', 'zin-eind', esc(z.eind) + ' '));
     /* Een koranvers krijgt de haken ﴿ ﴾ eromheen en een eigen opmaak, zoals in
        het bronmateriaal. De haken staan niet in de woordenlijst: ze horen bij
        de weergave, niet bij de tekst die je leert. */
-    if (z.koran) span.classList.add('koran');
+    if (z.koran && !perWoord) span.classList.add('koran');
     t.appendChild(span);
     /* De brontekst zet elke zin op een eigen regel; die indeling houden we aan. */
     if (z.regeleinde) t.appendChild(el('br'));
@@ -1052,7 +1070,7 @@ function toonWoord(ids, zin, wi, zinEl, wEl) {
     d.appendChild(el('div', 'kop', 'De zin'));
     const ar = el('div', 'zin-ar');
     zin.woorden.forEach((w, i) => {
-      const s = el(i === wi && w.ids.length ? 'b' : 'span', null, esc(w.w));
+      const s = el(i === wi && w.ids.length ? 'b' : 'span', w.u ? 'ku' : null, esc(w.u || w.w));
       ar.appendChild(s); ar.appendChild(document.createTextNode(' '));
     });
     d.appendChild(ar);

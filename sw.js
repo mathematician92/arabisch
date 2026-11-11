@@ -11,7 +11,7 @@
 
    VERSIE ophogen bij elke levering: dat ruimt de oude kast op.
 */
-const VERSIE = 'v2';
+const VERSIE = 'v5';
 const SCHIL = 'qiraa-schil-' + VERSIE;
 const SPUL = 'qiraa-spul-' + VERSIE;
 
@@ -28,6 +28,7 @@ const SCHIL_VOORRAAD = [
 const SPUL_VOORRAAD = [
   './icons/icoon-192.png',
   './icons/icoon-512.png',
+  './lettertype/UthmanicHafs1Ver18.woff2',
   './data/boeken.json',
   './data/woorden.json',
 ];
@@ -100,7 +101,7 @@ self.addEventListener('fetch', ev => {
   if (lettertype) { ev.respondWith(kastEerst(v, SPUL)); return; }
 
   const pad = url.pathname;
-  const isSpul = /\/(data|page|icons)\//.test(pad) ||
+  const isSpul = /\/(data|page|icons|lettertype)\//.test(pad) ||
                  /\.(json|png|jpg|jpeg|webp|svg|woff2?)$/i.test(pad);
 
   ev.respondWith(isSpul ? kastEerst(v, SPUL) : netEerst(v, SCHIL));

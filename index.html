@@ -162,6 +162,13 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 120px}
    (of .woff2, wat kleiner en sneller is). Ontbreekt het bestand, dan valt de
    browser terug op Noto Naskh Arabic en daarna Scheherazade New, en blijft
    alles gewoon leesbaar. */
+/* KFGQPC Hafs — de letter van de Medina-moshaf, zoals quran.com die gebruikt.
+   Het bestand hoort naast index.html te staan in de map lettertype/. */
+@font-face{
+  font-family:'KFGQPC Hafs';
+  src:url('lettertype/UthmanicHafs1Ver18.woff2') format('woff2');
+  font-weight:400; font-display:swap;
+}
 @font-face{
   font-family:'Al Mohanad';
   /* De browser probeert deze op volgorde en gebruikt de eerste die laadt. Het
@@ -205,6 +212,16 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 120px}
    rubriekkleur. De haken zijn opmaak, geen tekst — ze zitten in ::before en
    ::after zodat ze niet meelopen bij selecteren of zoeken. */
 .zin.koran{color:var(--rubric);font-family:'Amiri Quran','Scheherazade New',serif}
+/* Korantekst per woord. Met de schrijfwijze van de moshaf (.ku) hoort het
+   lettertype van de Medina-moshaf: KFGQPC Hafs, hetzelfde als op quran.com.
+   Zonder (.kw alleen) blijft het Amiri Quran. */
+.w.kw{color:var(--rubric);font-family:'Amiri Quran','Scheherazade New',serif}
+.ku, .w.ku{font-family:'KFGQPC Hafs','Amiri Quran','Scheherazade New',serif;font-size:1.15em}
+.w.kw.teleren{background-image:linear-gradient(var(--rubric),var(--rubric))}
+.haak{color:var(--rubric);font-family:'KFGQPC Hafs','Amiri Quran',serif;font-size:1.1em;opacity:.8}
+.vers-eind{white-space:nowrap}
+.versnr{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:.36em;color:var(--rubric);
+  opacity:.7;direction:ltr;unicode-bidi:isolate;white-space:nowrap;vertical-align:middle}
 .zin.koran::before{content:'\FD3F ';font-size:.85em;opacity:.75}
 .zin.koran::after{content:' \FD3E';font-size:.85em;opacity:.75}
 .zin.koran .w.teleren{background-image:linear-gradient(var(--rubric),var(--rubric))}
