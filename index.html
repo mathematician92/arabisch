@@ -501,6 +501,22 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 .voet button{font-size:12px;color:var(--ink-2);text-decoration:underline;
   text-underline-offset:3px;padding:6px 0}
 .voet button:hover{color:var(--rubric)}
+/* "Alles wissen" ver weg van "opslaan", en rood: één verkeerde tik is alles kwijt */
+.voet #btnWis{margin-left:auto;color:#a33;font-size:11px}
+.voet #btnWis:hover{color:#c00}
+/* een lege woordsoortkolom wordt weggelaten; de rest wordt breder */
+@media(min-width:901px){.kolommen.n2{grid-template-columns:repeat(2,1fr)}.kolommen.n1{grid-template-columns:1fr}}
+@media(min-width:561px) and (max-width:900px){.kolommen.n1{grid-template-columns:1fr}}
+/* telefoon: woordenlijst compact, woord en betekenis naast elkaar */
+@media(max-width:699px){
+  .kol .kaart{padding:5px 8px;min-height:0;align-items:center;gap:6px}
+  .kaart .mid{display:grid;grid-template-columns:minmax(84px,36%) 1fr;column-gap:12px;align-items:center}
+  .kaart .woord{font-size:22px;line-height:1.3;text-align:left}
+  .kaart .bet{margin-top:0;font-size:13px}
+  .kol .info{width:30px;height:30px;font-size:13px}
+  .kol .kaart:first-of-type{margin-top:2px}
+  .kol .kaart:last-of-type{margin-bottom:2px}
+}
 
 /* ---------- mijn woorden ---------- */
 .kop-knop{
@@ -655,6 +671,13 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
   .mob-stap[aria-expanded="true"]{border-color:var(--rubric);color:var(--rubric)}
   header .hwrap{display:none;padding-bottom:10px}
   header.menu-open .hwrap{display:flex}
+  /* menu: boek en les elk op een eigen hele regel, de knoppen netjes eronder */
+  header .hwrap .bediening{display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;padding:2px 12px 0}
+  header .hwrap .kies-groep{display:flex;flex-direction:column;gap:8px;width:100%}
+  header .hwrap .kies-groep .les-kies{width:100%;max-width:none;flex:none}
+  header .hwrap .knop-groep{display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap}
+  header .hwrap .weergave{margin-left:auto;display:flex;gap:4px}
+  header .hwrap .weergave button{min-width:44px;height:40px}
   header #stappen{display:none}
   header.stap-open #stappen{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;padding:4px 12px 12px}
   header.stap-open .stap{min-width:0;padding:7px 4px 7px 0}
@@ -715,8 +738,8 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 
 <footer class="voet">
   <button id="btnExport">Voortgang opslaan als bestand</button>
-  <button id="btnWis">Alles wissen</button>
   <span class="wolk-staat" id="wolkStaat" hidden><i></i><span></span></span>
+  <button id="btnWis">Alles wissen</button>
 </footer>
 
 <!-- ============================================================

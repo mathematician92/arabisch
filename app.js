@@ -590,6 +590,8 @@ function tekenKop() {
   if (t) t.textContent = (boekNu() || {}).titel || '';
   const st = document.getElementById('stappen');
   st.innerHTML = '';
+  /* in Mijn woorden zit je niet in een les: dan geen stappen */
+  st.style.display = S.scherm === 'lijst' ? 'none' : '';
   if (S.stap === 3 && !heeftExtra()) S.stap = 4;
   const vg = volgorde(), plekNu = vg.indexOf(S.stap);
   vg.forEach((i, plek) => {
@@ -695,7 +697,11 @@ function kaartVan(id, restMap) {
 
 function kolommenBlok(groepen, herkomst, toonHerkomst) {
   const kol = el('div', 'kolommen');
-  for (const cat of ['ism', 'fil', 'harf']) {
+  /* een lege kolom (vaak: geen partikels) laten we weg */
+  const cats = ['ism', 'fil', 'harf'].filter(c => (groepen[c] || []).length);
+  if (!cats.length) cats.push('ism');
+  kol.classList.add('n' + cats.length);
+  for (const cat of cats) {
     const c = el('div', 'kol kol-' + cat);
     const lijst = groepen[cat];
     c.appendChild(el('h3', null,
@@ -1498,6 +1504,7 @@ function tekenMoeilijk() {
   lade.appendChild(el('h2', null, 'Moeilijke woorden'));
 
   const wr = el('div', 'kolommen');
+  wr.classList.add('n' + new Set([...S.moeilijk].filter(i => lem(i)).map(i => lem(i).cat)).size);
   for (const cat of ['ism', 'fil', 'harf']) {
     const lijst = [...S.moeilijk].filter(i => lem(i) && lem(i).cat === cat);
     if (!lijst.length) continue;
@@ -1932,7 +1939,8 @@ document.getElementById('btnExport').onclick = () => {
   a.download = 'qirat-voortgang-' + Opslag.gebruiker + '.json'; a.click();
 };
 document.getElementById('btnWis').onclick = async () => {
-  if (!confirm('Alle voortgang wissen?' +
+  if (!confirm('Weet je het zeker?\n\nAl je voortgang wordt gewist: gekende woorden, ' +
+      'moeilijke woorden en afgeronde lessen. Dit kan niet ongedaan worden.' +
       (Wolk.klaar ? '\n\nOok online, en dus op al je apparaten.' : ''))) return;
   localStorage.removeItem(Opslag.sleutel());
   S.gekend = new Set(); S.afgerond = new Set(); S.moeilijk = new Set();
