@@ -35,14 +35,19 @@ const S = {
   wi: { bereik: 'gekend', boek: 'alles', op: 'woord', zoek: '' },
 };
 
+/* De nummers in S.stap zijn vast (0..5, ook in de bewaarde voortgang); de
+   volgorde op het scherm staat in volgorde(). Stap 3 ("Extra teksten") komt
+   als laatste en alleen in lessen die oefenteksten hebben. */
 const STAPPEN = [
-  { b: 'Stap 1', t: 'Lees de tekst' },
-  { b: 'Stap 2', t: 'Wat ken je al?' },
-  { b: 'Stap 3', t: 'Oefenen' },
-  { b: 'Stap 4', t: 'Oefenteksten' },
-  { b: 'Stap 5', t: 'Zinnen zeggen' },
-  { b: 'Stap 6', t: 'Nog eens lezen' },
+  { t: 'Lezen' },
+  { t: 'Woorden' },
+  { t: 'Overhoren' },
+  { t: 'Extra teksten' },
+  { t: 'Spreken' },
+  { t: 'Herhaling' },
 ];
+const heeftExtra = () => { const L = les(S.les); return !!(L && L.oefen && L.oefen.length); };
+const volgorde = () => heeftExtra() ? [0, 1, 2, 4, 5, 3] : [0, 1, 2, 4, 5];
 
 /* Voor- en achtervoegsels: die plak je aan een woord vast, ze zijn zelf geen
    woord om te markeren of te overhoren. */
@@ -526,7 +531,9 @@ function lesKop() {
   return 'Les ' + lesInHoofdstuk(S.les);
 }
 function hoofdstukLabel(h) {
-  return h.titel || ('Hoofdstuk ' + (h.nr || ''));
+  /* 'Hoofdstuk 4 · Hūd — الْعَاصِفَةُ' */
+  const kop = 'Hoofdstuk ' + (h.nr || '') + (h.profeet ? ' \u00B7 ' + h.profeet : '');
+  return h.titel ? kop + ' \u2014 ' + h.titel : kop;
 }
 function lesInHoofdstuk(nr) {
   const h = hoofdstukVan(nr);
@@ -583,8 +590,11 @@ function tekenKop() {
   if (t) t.textContent = (boekNu() || {}).titel || '';
   const st = document.getElementById('stappen');
   st.innerHTML = '';
-  STAPPEN.forEach((s, i) => {
-    const b = el('button', 'stap' + (i < S.stap ? ' klaar' : ''), `<b>${s.b}</b>${s.t}`);
+  if (S.stap === 3 && !heeftExtra()) S.stap = 4;
+  const vg = volgorde(), plekNu = vg.indexOf(S.stap);
+  vg.forEach((i, plek) => {
+    const s = STAPPEN[i];
+    const b = el('button', 'stap' + (plek < plekNu ? ' klaar' : ''), `<b>Stap ${plek + 1}</b>${s.t}`);
     b.setAttribute('aria-current', i === S.stap);
     b.onclick = () => {
       /* elke leesronde begint schoon: wat je vorige keer aantikte staat er niet meer */
@@ -609,7 +619,7 @@ function tekenKop() {
   const ms = document.getElementById('btnStap');
   if (ms) {
     ms.hidden = S.scherm === 'lijst';
-    ms.innerHTML = 'Stap ' + (S.stap + 1) + ' van ' + STAPPEN.length + ' &#9662;';
+    ms.innerHTML = 'Stap ' + (volgorde().indexOf(S.stap) + 1) + ' van ' + volgorde().length + ' &#9662;';
   }
   st.querySelectorAll('.stap').forEach(b => b.addEventListener('click', sluitMenus));
   meetKop();
@@ -1280,7 +1290,7 @@ function tekenZinnen() {
   const h = (S.hints[lesSleutel()] || {});
 
   const blad = el('div', 'blad');
-  blad.appendChild(el('h2', null, 'Zinnen zeggen — les ' + S.les));
+  blad.appendChild(el('h2', null, 'Spreken — les ' + S.les));
   blad.appendChild(el('div', 'balk', `<i style="width:${Math.round(100 * (i + 1) / zinnen.length)}%"></i>`));
   blad.appendChild(el('div', 'balk-tekst', `Zin ${i + 1} van ${zinnen.length}`));
 
@@ -1321,7 +1331,7 @@ function tekenZinnen() {
       a.appendChild(wk);
     }
   } else {
-    const n = el('button', 'knop', i + 1 < zinnen.length ? 'Volgende zin' : 'Klaar — naar stap 6');
+    const n = el('button', 'knop', i + 1 < zinnen.length ? 'Volgende zin' : 'Klaar — naar de herhaling');
     n.onclick = () => {
       if (i + 1 < zinnen.length) { S.zin = i + 1; S.open = 0; S.klaar = false; }
       else { S.stap = 5; S.geklikt = new Set(); }
@@ -1402,11 +1412,11 @@ function tekenOefening() {
   const pool = sp.alle.filter(i => !S.gekend.has(i) && lem(i) &&
     !lem(i).functie && losStaand(i));
   const blad = el('div', 'blad');
-  blad.appendChild(el('h2', null, 'Oefenen — les ' + S.les));
+  blad.appendChild(el('h2', null, 'Overhoren — les ' + S.les));
 
   if (!pool.length) {
     blad.appendChild(el('p', 'sub', 'Je hebt geen onbekende woorden meer in deze les.'));
-    blad.appendChild(volgendeKnop('Naar de oefenteksten', 3));
+    blad.appendChild(volgendeKnop('Naar spreken', 4));
     return blad;
   }
 
@@ -1463,8 +1473,8 @@ function tekenOefening() {
     n.onclick = () => { S.antwoord = null; S.vraag = nieuweVraag(pool); teken(); };
     a.appendChild(n);
   }
-  const d = el('button', 'knop zacht', 'Genoeg — naar de oefenteksten');
-  d.onclick = () => { S.stap = 3; S.antwoord = null; teken(); window.scrollTo(0, 0); };
+  const d = el('button', 'knop zacht', 'Genoeg — naar spreken');
+  d.onclick = () => { S.stap = 4; S.antwoord = null; teken(); window.scrollTo(0, 0); };
   a.appendChild(d);
   const i = el('button', 'knop zacht', 'Toon dit woord');
   i.onclick = () => toonWoord([v.id], null, null, null, null);
@@ -1734,6 +1744,8 @@ function teken() {
 
   const L = les(S.les);
   const sp = splitsLes(S.les);
+  /* "Extra teksten" bestaat niet in een les zonder oefenteksten */
+  if (S.stap === 3 && !heeftExtra()) S.stap = 4;
 
   /* ---- stap 1: lezen en aanklikken ---- */
   if (S.stap === 0) {
@@ -1767,7 +1779,7 @@ function teken() {
 
   /* ---- stap 2: woordenlijst ---- */
   else if (S.stap === 1) {
-    m.appendChild(tekenLijst('Wat ken je al? — les ' + S.les, '',
+    m.appendChild(tekenLijst('Woorden — les ' + S.les, '',
       () => volgendeKnop('Naar de oefeningen', 2)));
     const md = tekenMoeilijk(); if (md) m.appendChild(md);
   }
@@ -1780,13 +1792,12 @@ function teken() {
     const vast = L.oefen || [];
     const idx = Math.min(S.oefenIdx[lesSleutel()] || 0, Math.max(0, vast.length - 1));
     const blad = el('div', 'blad');
-    blad.appendChild(el('h2', null, 'Oefenteksten'));
+    blad.appendChild(el('h2', null, 'Extra teksten'));
 
     /* nog geen oefenteksten: geen lege knoppenrij en geen leeg keuzemenu */
     if (!vast.length) {
       blad.appendChild(el('p', 'leeg', 'Deze les heeft nog geen oefenteksten.'));
       m.appendChild(blad);
-      m.appendChild(volgendeKnop('Naar de zinnen', 4));
       return;
     }
 
@@ -1815,7 +1826,13 @@ function teken() {
       m.appendChild(tekenTekst(t.zinnen, t.titel,
         '', false, new Set(t.nieuw || [])));
     }
-    m.appendChild(volgendeKnop('Naar de zinnen', 4));
+    const volgX = lesLijst().find(l => l.nr === S.les + 1);
+    if (volgX) {
+      const a = el('div', 'acties');
+      const b = el('button', 'knop', 'Naar de volgende les');
+      b.onclick = () => gaNaar(S.boek, volgX.nr);
+      a.appendChild(b); m.appendChild(a);
+    }
   }
 
   /* ---- stap 5: zinnen zeggen ---- */
@@ -1825,7 +1842,7 @@ function teken() {
 
   /* ---- stap 6: nog eens lezen ---- */
   else if (S.stap === 5) {
-    const blad = tekenTekst(L.zinnen, 'Nog eens lezen — ' + L.titel,
+    const blad = tekenTekst(L.zinnen, 'Herhaling — ' + L.titel,
 '', true);
     const tel = el('div', 'balk-tekst');
     tel.style.marginTop = '16px';
@@ -1844,6 +1861,7 @@ function teken() {
       S.geklikt = new Set();
       const volg = lesLijst().find(l => l.nr === S.les + 1);
       bewaar();
+      if (heeftExtra()) { S.stap = 3; teken(); window.scrollTo(0, 0); return; }
       if (volg) { gaNaar(S.boek, volg.nr); return; }
       teken(); window.scrollTo(0, 0);
     };
