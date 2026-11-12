@@ -824,6 +824,13 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
         slot.appendChild(s);
         slot.appendChild(aya);
         span.appendChild(slot);
+      } else if (w.hv || w.hn) {
+        /* ronde haakjes en aanhalingstekens uit het boek blijven aan het woord vast */
+        const slot = el('span', 'vers-eind');
+        if (w.hv) slot.appendChild(document.createTextNode(w.hv));
+        slot.appendChild(s);
+        if (w.hn) slot.appendChild(document.createTextNode(w.hn));
+        span.appendChild(slot);
       } else {
         span.appendChild(s);
       }
