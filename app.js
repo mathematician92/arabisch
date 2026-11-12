@@ -567,7 +567,8 @@ function tekenKop() {
     const d = darsNr(L.titel);
     o.value = L.nr;
     /* binnen een hoofdstuk telt de app opnieuw vanaf 1 */
-    o.textContent = 'Les ' + lesInHoofdstuk(L.nr) + (d ? '  \u00B7  Dars ' + d : '') +
+    /* ✓ = afgerond */
+    o.textContent = (S.afgerond.has(S.boek + '-' + L.nr) ? '\u2713 ' : '') + 'Les ' + lesInHoofdstuk(L.nr) + (d ? '  \u00B7  Dars ' + d : '') +
                     (lesKern(L.titel) ? '  \u2014  ' + lesKern(L.titel) : '');
     if (L.nr === S.les) o.selected = true;
     bak.appendChild(o);
@@ -591,7 +592,7 @@ function tekenKop() {
   const st = document.getElementById('stappen');
   st.innerHTML = '';
   /* in Mijn woorden zit je niet in een les: dan geen stappen */
-  st.style.display = S.scherm === 'lijst' ? 'none' : '';
+  st.style.display = S.scherm !== 'les' ? 'none' : '';
   if (S.stap === 3 && !heeftExtra()) S.stap = 4;
   const vg = volgorde(), plekNu = vg.indexOf(S.stap);
   vg.forEach((i, plek) => {
@@ -612,22 +613,65 @@ function tekenKop() {
   });
   const bi = document.getElementById('btnIndex');
   if (bi) bi.classList.toggle('aan', S.scherm === 'lijst');
+  const bo = document.getElementById('btnOverzicht');
+  if (bo) bo.classList.toggle('aan', S.scherm === 'boek');
   /* de smalle balk op de telefoon */
   const mt = document.getElementById('mobTitel');
   if (mt) {
-    const L = S.scherm === 'lijst' ? null : les(S.les);
-    mt.innerHTML = L ? esc(lesKop()) + ' \u2014 <span class="ar">' + esc(L.titel) + '</span>' : 'Mijn woorden';
+    const L = S.scherm !== 'les' ? null : les(S.les);
+    mt.innerHTML = L ? esc(lesKop()) + ' \u2014 <span class="ar">' + esc(L.titel) + '</span>'
+      : S.scherm === 'boek' ? 'Overzicht' : 'Mijn woorden';
   }
   const ms = document.getElementById('btnStap');
   if (ms) {
-    ms.hidden = S.scherm === 'lijst';
-    ms.innerHTML = 'Stap ' + (volgorde().indexOf(S.stap) + 1) + ' van ' + volgorde().length + ' &#9662;';
+    ms.hidden = S.scherm !== 'les';
+    /* '3/5 · Overhoren ▾': je ziet meteen in welke stap je zit */
+    ms.innerHTML = (volgorde().indexOf(S.stap) + 1) + '/' + volgorde().length + ' \u00B7 ' +
+      esc(STAPPEN[S.stap].t) + ' &#9662;';
   }
   st.querySelectorAll('.stap').forEach(b => b.addEventListener('click', sluitMenus));
   meetKop();
 }
 
 /* Telefoon: menu en stappen openen en sluiten. Er staat er hooguit één open. */
+/* ---------------- overzicht van het boek ----------------
+   Alle lessen als vakjes: afgerond, gelezen of nog niet begonnen. Tik op een
+   vakje en je gaat naar die les. */
+function tekenOverzicht() {
+  const blad = el('div', 'blad overzicht');
+  const boek = boekNu() || {};
+  const lessen = lesLijst();
+  const sl = nr => S.boek + '-' + nr;
+  const nAf = lessen.filter(L => S.afgerond.has(sl(L.nr))).length;
+  const nGel = lessen.filter(L => !S.afgerond.has(sl(L.nr)) && S.gelezen.has(sl(L.nr))).length;
+  blad.appendChild(el('h2', null, 'Overzicht \u2014 ' + esc(boek.ondertitel || boek.titel || '')));
+  blad.appendChild(el('div', 'balk', `<i style="width:${Math.round(100 * nAf / Math.max(1, lessen.length))}%"></i>`));
+  blad.appendChild(el('div', 'balk-tekst', `${nAf} van ${lessen.length} lessen afgerond` +
+    (nGel ? ` \u00B7 ${nGel} gelezen` : '')));
+  blad.appendChild(el('div', 'ov-uitleg',
+    '<span><i class="ov-stip af"></i>afgerond</span><span><i class="ov-stip gel"></i>gelezen</span>' +
+    '<span><i class="ov-stip"></i>nog niet</span>'));
+  let rooster = null, lopend;
+  for (const L of lessen) {
+    const h = hoofdstukVan(L.nr);
+    if (!rooster || h !== lopend) {
+      lopend = h;
+      if (h) blad.appendChild(el('h3', 'ov-kop', esc(hoofdstukLabel(h))));
+      rooster = el('div', 'ov-rooster');
+      blad.appendChild(rooster);
+    }
+    const af = S.afgerond.has(sl(L.nr)), gel = S.gelezen.has(sl(L.nr));
+    const b = el('button', 'ov-les' + (af ? ' af' : gel ? ' gel' : '') + (L.nr === S.les ? ' nu' : ''));
+    const d = darsNr(L.titel), kern = lesKern(L.titel) || L.titel;
+    b.innerHTML = `<span class="ov-nr">${lesInHoofdstuk(L.nr)}${d ? ' \u00B7 Dars ' + d : ''}</span>` +
+      `<span class="ov-titel">${esc(kern)}</span>`;
+    b.title = (af ? 'Afgerond' : gel ? 'Gelezen' : 'Nog niet begonnen');
+    b.onclick = () => { gaNaar(S.boek, L.nr); window.scrollTo(0, 0); };
+    rooster.appendChild(b);
+  }
+  return blad;
+}
+
 function sluitMenus() {
   const h = document.querySelector('header');
   if (!h) return;
@@ -1748,6 +1792,7 @@ function teken() {
 
   /* Mijn woorden staat naast de lessen, niet erin: geen les nodig */
   if (S.scherm === 'lijst') { m.appendChild(tekenIndex()); return; }
+  if (S.scherm === 'boek') { m.appendChild(tekenOverzicht()); return; }
 
   const L = les(S.les);
   const sp = splitsLes(S.les);
@@ -1912,6 +1957,10 @@ document.getElementById('btnUit').onclick =
 document.getElementById('btnDonker').onclick = () => stelWeergaveIn('donker', !S.donker);
 pasWeergaveToe();
 
+document.getElementById('btnOverzicht').onclick = () => {
+  S.scherm = S.scherm === 'boek' ? 'les' : 'boek';
+  teken(); window.scrollTo(0, 0);
+};
 document.getElementById('btnIndex').onclick = () => {
   S.scherm = S.scherm === 'lijst' ? 'les' : 'lijst';
   teken(); window.scrollTo(0, 0);
@@ -1955,7 +2004,7 @@ document.getElementById('btnMenu').onclick = () => wisselMenu('menu-open');
 document.getElementById('btnStap').onclick = () => wisselMenu('stap-open');
 /* een keuze in het menu maken sluit het; zoom en donker niet, die probeer je vaak een paar keer */
 ['lesKies', 'boekKies'].forEach(id => document.getElementById(id).addEventListener('change', sluitMenus));
-['btnIndex', 'btnWie'].forEach(id => document.getElementById(id).addEventListener('click', sluitMenus));
+['btnIndex', 'btnWie', 'btnOverzicht'].forEach(id => document.getElementById(id).addEventListener('click', sluitMenus));
 /* tik je in de tekst, dan gaat wat openstaat dicht */
 document.getElementById('main').addEventListener('click', sluitMenus);
 

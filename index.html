@@ -129,7 +129,7 @@ header{
 .stap[aria-current="true"]{border-top-color:var(--rubric);color:var(--ink);font-weight:500}
 .stap.klaar{border-top-color:var(--ink-2)}
 
-main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 120px}
+main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 36px}
 
 /* ---------- paneel ---------- */
 .blad{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:clamp(14px,3.5vw,22px);margin-bottom:16px}
@@ -470,8 +470,8 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 }
 .weergave{display:flex;gap:2px;margin-left:3px;flex:0 0 auto}
 .weergave button{
-  min-width:36px;height:36px;border-radius:var(--r);font-size:13px;font-weight:500;
-  color:var(--ink-2);border:1px solid transparent
+  min-width:38px;height:36px;border-radius:var(--r);font-size:15px;font-weight:600;
+  color:var(--ink);border:1px solid var(--line);background:var(--card)
 }
 .weergave button:hover:not([disabled]){background:var(--card);border-color:var(--line);color:var(--ink)}
 .weergave button[disabled]{opacity:.3;cursor:default}
@@ -501,6 +501,26 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 .voet button{font-size:12px;color:var(--ink-2);text-decoration:underline;
   text-underline-offset:3px;padding:6px 0}
 .voet button:hover{color:var(--rubric)}
+/* ---------- overzicht van een boek ---------- */
+.ov-uitleg{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin:14px 0 6px}
+.ov-uitleg span{display:inline-flex;align-items:center;gap:6px}
+.ov-stip{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--line);background:var(--card)}
+.ov-stip.af{background:var(--ism);border-color:var(--ism)}
+.ov-stip.gel{background:var(--merk-vlak);border-color:var(--merk)}
+.ov-kop{font-size:13px;font-weight:600;margin:22px 0 8px;color:var(--ink)}
+.ov-rooster{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-top:10px}
+.ov-les{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;
+  padding:8px 10px;border:1px solid var(--line);border-radius:var(--r);background:var(--card);min-width:0}
+.ov-les:hover{border-color:var(--rubric)}
+.ov-nr{font-size:10.5px;letter-spacing:.06em;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.ov-titel{font-family:'Scheherazade New',serif;font-size:19px;line-height:1.35;direction:rtl;
+  width:100%;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ov-les.gel{background:var(--merk-vlak);border-color:var(--merk)}
+.ov-les.af{background:var(--ism);border-color:var(--ism);color:#fff}
+.ov-les.af .ov-nr{color:rgba(255,255,255,.75)}
+.ov-les.nu{box-shadow:0 0 0 2px var(--rubric)}
+body.donker .ov-les.af{background:#4d5a44;border-color:#4d5a44}
+@media(max-width:699px){.ov-rooster{grid-template-columns:repeat(2,1fr)}}
 /* "Alles wissen" ver weg van "opslaan", en rood: één verkeerde tik is alles kwijt */
 .voet #btnWis{margin-left:auto;color:#a33;font-size:11px}
 .voet #btnWis:hover{color:#c00}
@@ -676,8 +696,11 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
   header .hwrap .kies-groep{display:flex;flex-direction:column;gap:8px;width:100%}
   header .hwrap .kies-groep .les-kies{width:100%;max-width:none;flex:none}
   header .hwrap .knop-groep{display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap}
-  header .hwrap .weergave{margin-left:auto;display:flex;gap:4px}
-  header .hwrap .weergave button{min-width:44px;height:40px}
+  header .hwrap .knop-groep .kop-knop{flex:1 1 auto;height:40px;padding:0 10px}
+  header .hwrap .weergave{flex:1 1 100%;display:flex;gap:8px;margin:0}
+  header .hwrap .weergave button{flex:1 1 0;height:40px}
+  .ov-les{padding:6px 9px}
+  .ov-titel{font-size:17px}
   header #stappen{display:none}
   header.stap-open #stappen{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;padding:4px 12px 12px}
   header.stap-open .stap{min-width:0;padding:7px 4px 7px 0}
@@ -706,6 +729,7 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
       </div>
       <div class="knop-groep">
       <button class="kop-knop wie-knop" id="btnWie" hidden></button>
+      <button class="kop-knop" id="btnOverzicht">Overzicht</button>
       <button class="kop-knop" id="btnIndex">Mijn woorden</button>
       <div class="weergave">
         <button id="btnUit" title="Kleiner" aria-label="Tekst kleiner">A−</button>
