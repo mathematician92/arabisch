@@ -600,7 +600,39 @@ function tekenKop() {
   });
   const bi = document.getElementById('btnIndex');
   if (bi) bi.classList.toggle('aan', S.scherm === 'lijst');
+  /* de smalle balk op de telefoon */
+  const mt = document.getElementById('mobTitel');
+  if (mt) {
+    const L = S.scherm === 'lijst' ? null : les(S.les);
+    mt.innerHTML = L ? esc(lesKop()) + ' \u2014 <span class="ar">' + esc(L.titel) + '</span>' : 'Mijn woorden';
+  }
+  const ms = document.getElementById('btnStap');
+  if (ms) {
+    ms.hidden = S.scherm === 'lijst';
+    ms.innerHTML = 'Stap ' + (S.stap + 1) + ' van ' + STAPPEN.length + ' &#9662;';
+  }
+  st.querySelectorAll('.stap').forEach(b => b.addEventListener('click', sluitMenus));
   meetKop();
+}
+
+/* Telefoon: menu en stappen openen en sluiten. Er staat er hooguit één open. */
+function sluitMenus() {
+  const h = document.querySelector('header');
+  if (!h) return;
+  h.classList.remove('menu-open', 'stap-open');
+  const m = document.getElementById('btnMenu'), s = document.getElementById('btnStap');
+  if (m) m.setAttribute('aria-expanded', 'false');
+  if (s) s.setAttribute('aria-expanded', 'false');
+}
+function wisselMenu(soort) {
+  const h = document.querySelector('header');
+  const open = !h.classList.contains(soort);
+  sluitMenus();
+  if (open) {
+    h.classList.add(soort);
+    const k = document.getElementById(soort === 'menu-open' ? 'btnMenu' : 'btnStap');
+    if (k) k.setAttribute('aria-expanded', 'true');
+  }
 }
 
 /* De kop is sticky en valt op een smal scherm over meerdere regels. De
@@ -1893,6 +1925,13 @@ document.getElementById('btnWis').onclick = async () => {
 };
 
 document.getElementById('btnWie').onclick = () => toonInlog();
+document.getElementById('btnMenu').onclick = () => wisselMenu('menu-open');
+document.getElementById('btnStap').onclick = () => wisselMenu('stap-open');
+/* een keuze in het menu maken sluit het; zoom en donker niet, die probeer je vaak een paar keer */
+['lesKies', 'boekKies'].forEach(id => document.getElementById(id).addEventListener('change', sluitMenus));
+['btnIndex', 'btnWie'].forEach(id => document.getElementById(id).addEventListener('click', sluitMenus));
+/* tik je in de tekst, dan gaat wat openstaat dicht */
+document.getElementById('main').addEventListener('click', sluitMenus);
 
 (async function start() {
   try {

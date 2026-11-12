@@ -637,12 +637,44 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 .spin{display:inline-block;width:13px;height:13px;border:2px solid var(--line);border-top-color:var(--rubric);
       border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
 @keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- telefoon: één smalle balk ----------
+   Boek, les, naam, Mijn woorden, zoom en donker zitten achter ☰; de zes
+   stappen achter de stapknop rechts. Zo blijft het scherm voor de tekst. */
+.mobbalk{display:none}
+@media(max-width:699px){
+  .mobbalk{display:flex;align-items:center;gap:6px;height:46px;
+    padding:0 6px 0 4px;max-width:900px;margin:0 auto}
+  .mob-menu{width:40px;height:40px;font-size:20px;line-height:1;color:var(--ink);border-radius:var(--r);flex:0 0 auto}
+  .mob-menu[aria-expanded="true"]{background:var(--card);box-shadow:inset 0 0 0 1px var(--line)}
+  .mob-titel{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    font-size:13px;font-weight:600;letter-spacing:.04em;color:var(--rubric)}
+  .mob-titel .ar{font-size:17px;font-weight:400;letter-spacing:0}
+  .mob-stap{flex:0 0 auto;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r);
+    background:var(--card);font-size:12.5px;color:var(--ink);white-space:nowrap}
+  .mob-stap[aria-expanded="true"]{border-color:var(--rubric);color:var(--rubric)}
+  header .hwrap{display:none;padding-bottom:10px}
+  header.menu-open .hwrap{display:flex}
+  header #stappen{display:none}
+  header.stap-open #stappen{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;padding:4px 12px 12px}
+  header.stap-open .stap{min-width:0;padding:7px 4px 7px 0}
+  /* de titel en de voorleesbalk boven de tekst: de titel staat al in de balk */
+  .titelrij{display:none}
+  main{padding-left:6px;padding-right:6px}
+  .blad{padding:14px 12px}
+}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 
 <header>
+  <!-- Alleen op de telefoon: één smalle balk. Menu en stappen klappen open. -->
+  <div class="mobbalk">
+    <button class="mob-menu" id="btnMenu" aria-label="Menu" aria-expanded="false">&#9776;</button>
+    <span class="mob-titel" id="mobTitel"></span>
+    <button class="mob-stap" id="btnStap" aria-expanded="false"></button>
+  </div>
   <div class="hwrap">
     <div class="bediening">
       <div class="kies-groep">
