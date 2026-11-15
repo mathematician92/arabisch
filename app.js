@@ -327,7 +327,8 @@ const Wolk = {
     zet({});                       /* alles leeg voor de volgende */
     S.geklikt = new Set();
     S.oefenIdx = {}; S.vraag = null; S.antwoord = null;
-    S.stap = 0; S.zin = 0; S.open = 0; S.klaar = false; S.scherm = 'les';
+    S.stap = 0; S.zin = 0; S.open = 0; S.klaar = false;
+    S.scherm = S.reeks && S.naarReeks ? 'reeks' : 'les';
 
     localStorage.setItem(WIE, naam);
     if (this.auth) {
@@ -366,14 +367,37 @@ function toonInlog() {
   const namen = el('div', 'inlog-namen');
   mensen.forEach(naam => {
     const b = el('button', 'inlog-naam' + (naam === nu ? ' aan' : ''), esc(naam));
-    b.onclick = () => {
-      namen.querySelectorAll('button').forEach(k => { k.disabled = true; });
-      b.classList.add('aan');
-      if (naam === nu) { sluitInlog(); return; }   /* toch dezelfde */
-      Wolk.wissel(naam);
-    };
+    b.onclick = () => kiesReeks(naam);
     namen.appendChild(b);
   });
+
+  /* Tweede stap: welke reeks. Daarna het overzicht van die reeks. */
+  function kiesReeks(naam) {
+    const kies = el('div', 'inlog-doos');
+    kies.appendChild(el('h1', null, 'قِرَاءَة'));
+    kies.appendChild(el('p', null, 'Wat ga je lezen, ' + esc(naam) + '?'));
+    const rij = el('div', 'inlog-reeksen');
+    for (const r of REEKSEN) {
+      if (!S.index || !S.index.boeken.some(b => r.boeken.includes(b.id))) continue;
+      const k = el('button', 'inlog-reeks',
+        `<span class="ir-naam">${esc(r.naam)}</span><span class="ir-ar">${esc(r.ar)}</span>`);
+      k.onclick = async () => {
+        rij.querySelectorAll('button').forEach(x => { x.disabled = true; });
+        k.classList.add('aan');
+        S.reeks = r.id;
+        if (naam === nu) { sluitInlog(); S.scherm = 'reeks'; Stem.stop(); teken(); window.scrollTo(0, 0); return; }
+        S.naarReeks = true;
+        try { await Wolk.wissel(naam); } finally { S.naarReeks = false; }
+        S.scherm = 'reeks'; teken(); window.scrollTo(0, 0);
+      };
+      rij.appendChild(k);
+    }
+    kies.appendChild(rij);
+    const terug = el('button', 'inlog-los', '\u2190 Andere naam');
+    terug.onclick = () => { o.replaceChild(doos, kies); };
+    kies.appendChild(terug);
+    o.replaceChild(kies, doos);
+  }
   doos.appendChild(namen);
   doos.appendChild(el('div', 'inlog-fout'));
 
@@ -520,11 +544,11 @@ function lesKern(titel) {
 /* Sommige boeken bestaan uit hoofdstukken terwijl de lessen doorgenummerd
    zijn. Staat de indeling in boeken.json, dan zet de app kopjes in het
    keuzemenu en begint de telling onder elk kopje weer bij 1. */
-function hoofdstukken() {
-  return (S.index.boeken.find(b => b.id === S.boek) || {}).hoofdstukken || [];
+function hoofdstukken(boek = S.boek) {
+  return (S.index.boeken.find(b => b.id === boek) || {}).hoofdstukken || [];
 }
-function hoofdstukVan(nr) {
-  return hoofdstukken().find(x => nr >= x.van && nr <= x.tot) || null;
+function hoofdstukVan(nr, boek = S.boek) {
+  return hoofdstukken(boek).find(x => nr >= x.van && nr <= x.tot) || null;
 }
 /* 'Les 3' — binnen een hoofdstuk opnieuw geteld, anders gewoon het lesnummer */
 function lesKop() {
@@ -535,9 +559,53 @@ function hoofdstukLabel(h) {
   const kop = 'Hoofdstuk ' + (h.nr || '') + (h.profeet ? ' \u00B7 ' + h.profeet : '');
   return h.titel ? kop + ' \u2014 ' + h.titel : kop;
 }
-function lesInHoofdstuk(nr) {
-  const h = hoofdstukVan(nr);
+function lesInHoofdstuk(nr, boek = S.boek) {
+  const h = hoofdstukVan(nr, boek);
   return h ? nr - h.van + 1 : nr;
+}
+
+/* ---------------- reeksen ----------------
+   De boeken vallen in twee reeksen. Na het kiezen van een naam kies je een
+   reeks en zie je het overzicht van al haar boeken. */
+const REEKSEN = [
+  { id: 'aby', naam: 'Al-ʿArabiyya bayna yadayk', ar: 'العربية بين يديك',
+    boeken: ['bayna', 'baynatwee', 'baynatwee2', 'baynadrie'] },
+  { id: 'lees', naam: 'Leesboeken', ar: 'قصص النبيين · القراءة الراشدة',
+    boeken: ['qasas', 'qirat'] },
+];
+const reeksVan = boek => REEKSEN.find(r => r.boeken.includes(boek)) || null;
+const BOEK_KORT = { bayna: 'ABY B1', baynatwee: 'ABY B2D1', baynatwee2: 'ABY B2D2',
+                    baynadrie: 'ABY B3D1', qasas: 'Qaṣaṣ', qirat: 'Qirāʾa' };
+
+/* Waar een woord staat, kort: in het eigen boek 'les 5' of 'H2 les 1',
+   uit een ander boek 'ABY B2D1L2', 'Qaṣaṣ H2L1' of 'Qirāʾa L5'. */
+function plekLabel(boek, nr) {
+  const h = hoofdstukVan(nr, boek), n = h ? nr - h.van + 1 : nr;
+  if (boek === S.boek) return h ? 'H' + h.nr + ' les ' + n : 'les ' + n;
+  const kort = BOEK_KORT[boek] || boek;
+  const plek = (h ? 'H' + h.nr : '') + 'L' + n;
+  return kort.startsWith('ABY') ? kort + plek : kort + ' ' + plek;
+}
+
+/* Waar je een woord al eerder bent tegengekomen: in dit boek elke eerdere
+   les; in een ander boek alleen lessen die je gelezen of afgerond hebt.
+   Per boek de eerste les. Volgorde: dit boek, dan de eigen reeks, dan de
+   andere reeks. */
+function plekkenVan(id) {
+  const e = lem(id);
+  if (!e || !e.komt) return [];
+  const per = new Map();
+  for (const s of e.komt) {
+    const i = s.lastIndexOf('-'), boek = s.slice(0, i), nr = Number(s.slice(i + 1));
+    if (boek === S.boek ? nr >= S.les : !(S.gelezen.has(s) || S.afgerond.has(s))) continue;
+    if (!per.has(boek) || nr < per.get(boek)) per.set(boek, nr);
+  }
+  const eigen = reeksVan(S.boek);
+  const rang = b => b === S.boek ? 0 : (eigen && eigen.boeken.includes(b) ? 1 : 2);
+  const volg = REEKSEN.flatMap(r => r.boeken);
+  return [...per.entries()]
+    .sort((a, b) => rang(a[0]) - rang(b[0]) || volg.indexOf(a[0]) - volg.indexOf(b[0]))
+    .map(([boek, nr]) => ({ boek, nr, label: plekLabel(boek, nr) }));
 }
 
 /* ---------------- kop + stappen ---------------- */
@@ -550,17 +618,20 @@ function tekenKop() {
   /* Qasas loopt door van les 1 tot 74 maar bestaat uit vier verhalen. Staan
      die in boeken.json, dan zetten we ze als kopjes boven hun lessen: de
      browser toont zo'n kopje grijs en niet aanklikbaar, precies goed. */
-  let bak = kies, lopend = null;
+  /* Een hoofdstuk is een eigen regel (▦): kies je die, dan ga je naar het
+     overzicht bij dat hoofdstuk. De lessen staan er ingesprongen onder. */
+  const bak = kies;
+  let lopend = null;
   for (const L of lesLijst()) {
     const h = hoofdstukVan(L.nr);
     if (h !== lopend) {
       lopend = h;
       if (h) {
-        bak = document.createElement('optgroup');
-        bak.label = hoofdstukLabel(h);
-        kies.appendChild(bak);
-      } else {
-        bak = kies;
+        const o = document.createElement('option');
+        o.value = 'h:' + h.nr; o.className = 'kop';
+        o.textContent = '\u25A6 ' + hoofdstukLabel(h);
+        if (S.scherm === 'boek' && S.hfd === h.nr) o.selected = true;
+        kies.appendChild(o);
       }
     }
     const o = document.createElement('option');
@@ -568,24 +639,57 @@ function tekenKop() {
     o.value = L.nr;
     /* binnen een hoofdstuk telt de app opnieuw vanaf 1 */
     /* ✓ = afgerond */
-    o.textContent = (S.afgerond.has(S.boek + '-' + L.nr) ? '\u2713 ' : '') + 'Les ' + lesInHoofdstuk(L.nr) + (d ? '  \u00B7  Dars ' + d : '') +
+    o.textContent = (h ? '\u2003' : '') + (S.afgerond.has(S.boek + '-' + L.nr) ? '\u2713 ' : '') + 'Les ' + lesInHoofdstuk(L.nr) + (d ? '  \u00B7  Dars ' + d : '') +
                     (lesKern(L.titel) ? '  \u2014  ' + lesKern(L.titel) : '');
-    if (L.nr === S.les) o.selected = true;
+    if (L.nr === S.les && !(S.scherm === 'boek' && S.hfd)) o.selected = true;
     bak.appendChild(o);
   }
-  kies.onchange = () => naarLes(Number(kies.value));
+  kies.onchange = () => {
+    if (kies.value.startsWith('h:')) {
+      Stem.stop();
+      S.hfd = Number(kies.value.slice(2)); S.scherm = 'boek';
+      teken();
+      const doel = document.getElementById('ovh-' + S.boek + '-' + S.hfd);
+      window.scrollTo(0, doel ? doel.getBoundingClientRect().top + window.scrollY - kopHoogte() - 12 : 0);
+      return;
+    }
+    S.hfd = null;
+    naarLes(Number(kies.value));
+  };
   /* boekkeuze verschijnt zodra er meer dan één boek is */
   const bk = document.getElementById('boekKies');
   bk.style.display = S.index.boeken.length > 1 ? 'block' : 'none';
   if (S.index.boeken.length > 1) {
     bk.innerHTML = '';
-    for (const b of S.index.boeken) {
+    /* Per reeks eerst 'overzicht', dan de losse boeken. */
+    const optie = (bak, waarde, tekst, aan) => {
       const o = document.createElement('option');
-      o.value = b.id; o.textContent = b.ondertitel || b.titel;
-      if (b.id === S.boek) o.selected = true;
-      bk.appendChild(o);
+      o.value = waarde; o.textContent = tekst; if (aan) o.selected = true;
+      bak.appendChild(o);
+    };
+    const gehad = new Set();
+    for (const r of REEKSEN) {
+      const boeken = S.index.boeken.filter(b => r.boeken.includes(b.id))
+        .sort((a, b) => r.boeken.indexOf(a.id) - r.boeken.indexOf(b.id));
+      if (!boeken.length) continue;
+      optie(bk, 'reeks:' + r.id, '\u25A6 ' + r.naam,
+            S.scherm === 'reeks' && (S.reeks || (reeksVan(S.boek) || {}).id) === r.id);
+      bk.lastChild.className = 'kop';
+      for (const b of boeken) {
+        gehad.add(b.id);
+        optie(bk, b.id, '\u2003' + (b.ondertitel || b.titel), S.scherm !== 'reeks' && b.id === S.boek);
+      }
     }
-    bk.onchange = () => gaNaar(bk.value, S.index.boeken.find(b => b.id === bk.value).lessen[0].nr);
+    for (const b of S.index.boeken) if (!gehad.has(b.id)) optie(bk, b.id, b.ondertitel || b.titel, S.scherm !== 'reeks' && b.id === S.boek);
+    bk.onchange = () => {
+      if (bk.value.startsWith('reeks:')) {
+        Stem.stop();
+        S.reeks = bk.value.slice(6); S.scherm = 'reeks';
+        teken(); window.scrollTo(0, 0);
+        return;
+      }
+      gaNaar(bk.value, S.index.boeken.find(b => b.id === bk.value).lessen[0].nr);
+    };
   }
   const t = document.getElementById('boekTitel');
   if (t) t.textContent = (boekNu() || {}).titel || '';
@@ -620,7 +724,9 @@ function tekenKop() {
   if (mt) {
     const L = S.scherm !== 'les' ? null : les(S.les);
     mt.innerHTML = L ? esc(lesKop()) + ' \u2014 <span class="ar">' + esc(L.titel) + '</span>'
-      : S.scherm === 'boek' ? 'Overzicht' : 'Mijn woorden';
+      : S.scherm === 'boek' ? 'Overzicht'
+      : S.scherm === 'reeks' ? esc((REEKSEN.find(x => x.id === S.reeks) || {}).naam || 'Overzicht')
+      : 'Mijn woorden';
   }
   const ms = document.getElementById('btnStap');
   if (ms) {
@@ -637,38 +743,76 @@ function tekenKop() {
 /* ---------------- overzicht van het boek ----------------
    Alle lessen als vakjes: afgerond, gelezen of nog niet begonnen. Tik op een
    vakje en je gaat naar die les. */
-function tekenOverzicht() {
-  const blad = el('div', 'blad overzicht');
-  const boek = boekNu() || {};
-  const lessen = lesLijst();
-  const sl = nr => S.boek + '-' + nr;
+function overzichtVanBoek(blad, boekId, kopNiveau) {
+  const boek = S.index.boeken.find(b => b.id === boekId) || { lessen: [] };
+  const lessen = boek.lessen;
+  const sl = nr => boekId + '-' + nr;
   const nAf = lessen.filter(L => S.afgerond.has(sl(L.nr))).length;
   const nGel = lessen.filter(L => !S.afgerond.has(sl(L.nr)) && S.gelezen.has(sl(L.nr))).length;
-  blad.appendChild(el('h2', null, 'Overzicht \u2014 ' + esc(boek.ondertitel || boek.titel || '')));
+  const naam = esc(boek.ondertitel || boek.titel || '');
+  if (kopNiveau === 'h2') blad.appendChild(el('h2', null, 'Overzicht — ' + naam));
+  else {
+    const k = el('h3', 'ov-boek', naam + (boek.titel && boek.ondertitel ? ` <span class="ar">${esc(boek.titel)}</span>` : ''));
+    k.id = 'ov-' + boekId;
+    blad.appendChild(k);
+  }
   blad.appendChild(el('div', 'balk', `<i style="width:${Math.round(100 * nAf / Math.max(1, lessen.length))}%"></i>`));
   blad.appendChild(el('div', 'balk-tekst', `${nAf} van ${lessen.length} lessen afgerond` +
-    (nGel ? ` \u00B7 ${nGel} gelezen` : '')));
-  blad.appendChild(el('div', 'ov-uitleg',
-    '<span><i class="ov-stip af"></i>afgerond</span><span><i class="ov-stip gel"></i>gelezen</span>' +
-    '<span><i class="ov-stip"></i>nog niet</span>'));
+    (nGel ? ` · ${nGel} gelezen` : '')));
   let rooster = null, lopend;
   for (const L of lessen) {
-    const h = hoofdstukVan(L.nr);
+    const h = hoofdstukVan(L.nr, boekId);
     if (!rooster || h !== lopend) {
       lopend = h;
-      if (h) blad.appendChild(el('h3', 'ov-kop', esc(hoofdstukLabel(h))));
+      if (h) {
+        const hk = el('h3', 'ov-kop', esc(hoofdstukLabel(h)));
+        hk.id = 'ovh-' + boekId + '-' + h.nr;
+        blad.appendChild(hk);
+      }
       rooster = el('div', 'ov-rooster');
       blad.appendChild(rooster);
     }
     const af = S.afgerond.has(sl(L.nr)), gel = S.gelezen.has(sl(L.nr));
-    const b = el('button', 'ov-les' + (af ? ' af' : gel ? ' gel' : '') + (L.nr === S.les ? ' nu' : ''));
+    const nu = boekId === S.boek && L.nr === S.les;
+    const b = el('button', 'ov-les' + (af ? ' af' : gel ? ' gel' : '') + (nu ? ' nu' : ''));
     const d = darsNr(L.titel), kern = lesKern(L.titel) || L.titel;
-    b.innerHTML = `<span class="ov-nr">${lesInHoofdstuk(L.nr)}${d ? ' \u00B7 Dars ' + d : ''}</span>` +
+    b.innerHTML = `<span class="ov-nr">${lesInHoofdstuk(L.nr, boekId)}${d ? ' · Dars ' + d : ''}</span>` +
       `<span class="ov-titel">${esc(kern)}</span>`;
     b.title = (af ? 'Afgerond' : gel ? 'Gelezen' : 'Nog niet begonnen');
-    b.onclick = () => { gaNaar(S.boek, L.nr); window.scrollTo(0, 0); };
+    b.onclick = () => { gaNaar(boekId, L.nr); window.scrollTo(0, 0); };
     rooster.appendChild(b);
   }
+}
+const OV_UITLEG = '<span><i class="ov-stip af"></i>afgerond</span><span><i class="ov-stip gel"></i>gelezen</span>' +
+  '<span><i class="ov-stip"></i>nog niet</span>';
+
+function tekenOverzicht() {
+  const blad = el('div', 'blad overzicht');
+  overzichtVanBoek(blad, S.boek, 'h2');
+  blad.insertBefore(el('div', 'ov-uitleg', OV_UITLEG), blad.children[3] || null);
+  return blad;
+}
+
+/* Overzicht van een hele reeks: alle boeken onder elkaar, elk met al zijn
+   lessen. Bovenaan knopjes om naar een boek te springen. */
+function tekenReeks() {
+  const r = REEKSEN.find(x => x.id === S.reeks) || reeksVan(S.boek) || REEKSEN[0];
+  const boeken = r.boeken.filter(id => S.index.boeken.some(b => b.id === id));
+  const blad = el('div', 'blad overzicht');
+  blad.appendChild(el('h2', null, esc(r.naam) + ` <span class="ar ov-reeks-ar">${esc(r.ar)}</span>`));
+  const sprong = el('div', 'ov-sprong');
+  for (const id of boeken) {
+    const b = S.index.boeken.find(x => x.id === id);
+    const k = el('button', 'ov-sprong-knop', esc(b.ondertitel || b.titel));
+    k.onclick = () => {
+      const doel = document.getElementById('ov-' + id);
+      if (doel) window.scrollTo(0, doel.getBoundingClientRect().top + window.scrollY - kopHoogte() - 12);
+    };
+    sprong.appendChild(k);
+  }
+  if (boeken.length > 1) blad.appendChild(sprong);
+  blad.appendChild(el('div', 'ov-uitleg', OV_UITLEG));
+  for (const id of boeken) overzichtVanBoek(blad, id, 'h3');
   return blad;
 }
 
@@ -718,11 +862,17 @@ addEventListener('resize', meetKop);
 addEventListener('orientationchange', meetKop);
 
 /* ---------------- woordenlijst ---------------- */
-function kaartVan(id, restMap) {
+function kaartVan(id) {
   const e = lem(id);
   const k = el('button', 'kaart' + (S.gekend.has(id) ? ' gekend' : ''));
-  const merk = restMap && restMap.has(id)
-    ? `<span class="merk">les ${restMap.get(id)}</span>` : '';
+  /* Het merkje zegt alleen waar het woord eerder in DIT boek stond. Kwam je
+     het ook tegen in een ander boek dat je gelezen hebt, dan kleurt ⓘ en
+     staat daaronder in welke boeken. Zo zie je meteen: nieuw in dit boek,
+     maar al eens gehad. */
+  const pl = plekkenVan(id);
+  const hier = pl.find(p => p.boek === S.boek);
+  const elders = pl.filter(p => p.boek !== S.boek);
+  const merk = hier ? `<span class="merk">${esc(hier.label)}</span>` : '';
   k.innerHTML = `<div class="mid">
       <div class="woord">${esc(e.lemma)}</div>
       <div class="bet">${merk}${esc(e.nl)}</div>
@@ -732,8 +882,9 @@ function kaartVan(id, restMap) {
     S.gekend.has(id) ? S.gekend.delete(id) : S.gekend.add(id);
     bewaar(); teken();
   };
-  const i = el('button', 'info', 'ⓘ');
+  const i = el('button', 'info' + (elders.length ? ' elders' : ''), 'ⓘ');
   i.setAttribute('aria-label', 'Details van ' + e.lemma);
+  if (elders.length) i.title = 'Ook gezien in: ' + elders.map(p => p.label).join(' · ');
   i.onclick = ev => { ev.stopPropagation(); toonWoord([id]); };
   k.appendChild(i);
   return k;
@@ -752,7 +903,7 @@ function kolommenBlok(groepen, herkomst, toonHerkomst) {
       `<span class="ar">${CATS[cat].ar}</span><span class="lat">${CATS[cat].lat}</span>` +
       `<span class="tel">${lijst.length}</span>`));
     if (!lijst.length) c.appendChild(el('div', 'leeg', '—'));
-    for (const id of lijst) c.appendChild(kaartVan(id, toonHerkomst ? herkomst : null));
+    for (const id of lijst) c.appendChild(kaartVan(id));
     kol.appendChild(c);
   }
   return kol;
@@ -827,17 +978,36 @@ function tekenLijst(titel, sub, metActies) {
       () => kolommenBlok(gek, sp.herkomst, true)));
   }
 
-  /* lidwoord, voegwoorden en aanhechtsels apart */
-  if (tel(sp.bouw)) {
-    blad.appendChild(vouwLade('bouw', 'Bouwsteentjes', tel(sp.bouw),
-      () => kolommenBlok(sp.bouw, null, false)));
-  }
+  /* De bouwsteentjes (lidwoord, voegwoorden, aanhechtsels) tonen we niet meer. */
 
   if (metActies) blad.appendChild(metActies());
   return blad;
 }
 
 /* ---------------- tekstweergave ---------------- */
+/* Herkent het vragenkader van Boek 3: de eerste regel is 'ما قبل القراءة',
+   de eerste regel zonder leesteken daarna is de titel van de tekst.
+   kop = de regels die geen vraag zijn maar een tussenkopje ('beantwoord…:'). */
+const VL_TUSSEN = { 2: [0], 8: [2] };   /* per les: regels die ook tussenkop zijn */
+function vragenIndeling(zinnen) {
+  if (S.boek !== 'baynadrie' || !zinnen.length) return null;
+  const kaal = z => z.woorden.map(w => w.w).join(' ').replace(/[\u064B-\u0652\u0670]/g, '');
+  if (kaal(zinnen[0]) !== 'ما قبل القراءة') return null;
+  let titel = -1;
+  for (let i = 1; i < zinnen.length; i++) {
+    if (!zinnen[i].eind && zinnen[i].regeleinde) { titel = i; break; }
+  }
+  if (titel < 2) return null;
+  const kop = new Set(), extra = VL_TUSSEN[S.les] || [];
+  let begin = 1, n = 0;
+  for (let i = 1; i < titel; i++) {
+    if (!zinnen[i].regeleinde) continue;
+    if (zinnen[i].eind === ':' || extra.includes(n)) kop.add(begin);
+    begin = i + 1; n++;
+  }
+  return { titel, kop };
+}
+
 function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
   const blad = el('div', 'blad');
   if (sub) blad.appendChild(el('p', 'sub', sub));
@@ -849,6 +1019,15 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
      en eind (w.ks) van het stuk tussen haken. Dan zetten we de haken precies
      om het vers; de oude vlag op de hele zin is alleen nog een terugval. */
   const perWoord = zinnen.some(z => z.woorden.some(w => w.k));
+  /* Boek 3 begint elke tekst met de vragen 'ما قبل القراءة' uit het blauwe
+     kader, daarna de titel en dan pas de tekst. Het kader krijgt een eigen
+     vlak met genummerde vragen; de titel wordt een kopregel. */
+  const vl = vragenIndeling(zinnen);
+  let kader = null, regel = null, vnr = 0, groep = [];
+  const sluitGroep = () => {          /* één los punt krijgt geen nummer */
+    if (groep.length === 1) groep[0].classList.add('vl-los');
+    groep = []; vnr = 0;
+  };
   zinnen.forEach((z, zi) => {
     const span = el('span', 'zin');
     span.dataset.zin = zi;
@@ -940,6 +1119,34 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
        het bronmateriaal. De haken staan niet in de woordenlijst: ze horen bij
        de weergave, niet bij de tekst die je leert. */
     if (z.koran && !perWoord) span.classList.add('koran');
+    if (vl && zi <= vl.titel) {
+      if (zi === 0) {
+        kader = el('div', 'vl-kader');
+        const kop = el('div', 'vl-kop'); kop.appendChild(span);
+        kader.appendChild(kop); t.appendChild(kader);
+      } else if (zi === vl.titel) {
+        sluitGroep();
+        const tt = el('div', 'tekst-titel'); tt.appendChild(span);
+        t.appendChild(tt);
+      } else {
+        if (!regel) {
+          const tussen = vl.kop.has(zi);
+          if (tussen) sluitGroep();
+          regel = el('div', tussen ? 'vl-tussen' : 'vl-vraag');
+          if (!tussen) {
+            vnr++;
+            regel.appendChild(el('span', 'vl-nr',
+              String(vnr).replace(/\d/g, c => String.fromCharCode(0x0660 + Number(c)))));
+            groep.push(regel);
+          }
+          regel.appendChild(el('span', 'vl-zin'));
+          kader.appendChild(regel);
+        }
+        regel.lastChild.appendChild(span);
+        if (z.regeleinde) regel = null;
+      }
+      return;
+    }
     t.appendChild(span);
     /* De brontekst zet elke zin op een eigen regel; die indeling houden we aan. */
     if (z.regeleinde) t.appendChild(el('br'));
@@ -1210,6 +1417,13 @@ function toonWoord(ids, zin, wi, zinEl, wEl) {
     d.appendChild(lr);
     d.appendChild(el('div', 'lemma-nl', esc(e.nl)));
 
+    const pl = plekkenVan(id);
+    if (pl.length) {
+      const g = el('div', 'gezien');
+      g.appendChild(el('span', 'gezien-kop', 'Eerder gezien in'));
+      pl.forEach(x => g.appendChild(el('span', 'pil', esc(x.label))));
+      d.appendChild(g);
+    }
     const meta = el('div', 'meta');
     if (e.root) meta.appendChild(el('span', 'pil', 'stamletters <span class="ar">' + esc(e.root.split('').join(' ')) + '</span>'));
     if (e.soort) meta.appendChild(el('span', 'pil', '<span class="ar">' + esc(e.soort) + '</span>'));
@@ -1340,7 +1554,7 @@ function tekenZinnen() {
   const h = (S.hints[lesSleutel()] || {});
 
   const blad = el('div', 'blad');
-  blad.appendChild(el('h2', null, 'Spreken — les ' + S.les));
+  blad.appendChild(el('h2', null, 'Spreken — les ' + lesInHoofdstuk(S.les)));
   blad.appendChild(el('div', 'balk', `<i style="width:${Math.round(100 * (i + 1) / zinnen.length)}%"></i>`));
   blad.appendChild(el('div', 'balk-tekst', `Zin ${i + 1} van ${zinnen.length}`));
 
@@ -1462,7 +1676,7 @@ function tekenOefening() {
   const pool = sp.alle.filter(i => !S.gekend.has(i) && lem(i) &&
     !lem(i).functie && losStaand(i));
   const blad = el('div', 'blad');
-  blad.appendChild(el('h2', null, 'Overhoren — les ' + S.les));
+  blad.appendChild(el('h2', null, 'Overhoren — les ' + lesInHoofdstuk(S.les)));
 
   if (!pool.length) {
     blad.appendChild(el('p', 'sub', 'Je hebt geen onbekende woorden meer in deze les.'));
@@ -1793,6 +2007,7 @@ function teken() {
   /* Mijn woorden staat naast de lessen, niet erin: geen les nodig */
   if (S.scherm === 'lijst') { m.appendChild(tekenIndex()); return; }
   if (S.scherm === 'boek') { m.appendChild(tekenOverzicht()); return; }
+  if (S.scherm === 'reeks') { m.appendChild(tekenReeks()); return; }
 
   const L = les(S.les);
   const sp = splitsLes(S.les);
@@ -1831,7 +2046,7 @@ function teken() {
 
   /* ---- stap 2: woordenlijst ---- */
   else if (S.stap === 1) {
-    m.appendChild(tekenLijst('Woorden — les ' + S.les, '',
+    m.appendChild(tekenLijst('Woorden — les ' + lesInHoofdstuk(S.les), '',
       () => volgendeKnop('Naar de oefeningen', 2)));
     const md = tekenMoeilijk(); if (md) m.appendChild(md);
   }
@@ -1958,7 +2173,7 @@ document.getElementById('btnDonker').onclick = () => stelWeergaveIn('donker', !S
 pasWeergaveToe();
 
 document.getElementById('btnOverzicht').onclick = () => {
-  S.scherm = S.scherm === 'boek' ? 'les' : 'boek';
+  S.scherm = S.scherm === 'boek' ? 'les' : 'boek'; S.hfd = null;
   teken(); window.scrollTo(0, 0);
 };
 document.getElementById('btnIndex').onclick = () => {
