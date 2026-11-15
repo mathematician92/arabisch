@@ -988,7 +988,7 @@ function tekenLijst(titel, sub, metActies) {
 /* Herkent het vragenkader van Boek 3: de eerste regel is 'ما قبل القراءة',
    de eerste regel zonder leesteken daarna is de titel van de tekst.
    kop = de regels die geen vraag zijn maar een tussenkopje ('beantwoord…:'). */
-const VL_TUSSEN = { baynadrie: { 2: [0], 8: [2] } };   /* per boek en les: regels die ook tussenkop zijn */
+const VL_TUSSEN = { baynadrie: { 2: [0], 8: [2] }, baynadrie2: { 3: [2] } };   /* per boek en les: regels die ook tussenkop zijn */
 function vragenIndeling(zinnen) {
   if (!['baynadrie', 'baynadrie2'].includes(S.boek) || !zinnen.length) return null;
   const kaal = z => z.woorden.map(w => w.w).join(' ').replace(/[\u064B-\u0652\u0670]/g, '');
