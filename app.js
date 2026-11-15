@@ -82,20 +82,44 @@ const WIE = 'qirat.wie';   // wie er op dit apparaat het laatst inlogde
    (dars 98 en 101) heten nu les 31 en 32. Voortgang van vóór die tijd (zonder
    'nummering') schuiven we één keer mee op, of hij nu van dit apparaat komt of
    uit de wolk. */
-const NUMMERING = 2;
+const NUMMERING = 3;
+/* Stap 3: in boek 2 kregen de leesteksten hun vragen vooraf (تَهْيِئَة) en
+   de titelregel erbij, vóór de tekst. De zinnen schuiven daardoor op; de
+   hints (per zinnummer) schuiven we evenveel mee. Getal = aantal nieuwe
+   zinsdelen vooraan. */
+const VRAAG_SCHUIF = {
+  baynatwee: { 2: 8, 4: 13, 6: 8, 8: 10, 10: 8, 12: 8, 14: 9, 16: 7, 18: 10, 20: 8,
+               22: 10, 24: 7, 26: 7, 28: 7, 30: 8, 32: 7 },
+  baynatwee2: { 2: 7, 4: 11, 6: 7, 8: 7, 10: 7, 12: 7, 14: 10, 16: 8, 18: 7, 20: 8,
+                22: 8, 24: 7, 26: 9, 28: 7, 30: 8, 32: 7 },
+};
 function omnummer(r) {
   if (!r || !Object.keys(r).length || (r.nummering || 1) >= NUMMERING) return r;
-  const schuif = k => {
-    const m = /^baynatwee-(\d+)(.*)$/.exec(String(k));
-    return m && +m[1] >= 30 ? 'baynatwee-' + (+m[1] + 1) + m[2] : k;
-  };
-  const obj = x => { const u = {}; for (const k of Object.keys(x || {})) u[schuif(k)] = x[k]; return u; };
-  const u = Object.assign({}, r, {
-    afgerond: (r.afgerond || []).map(schuif), gelezen: (r.gelezen || []).map(schuif),
-    score: obj(r.score), hints: obj(r.hints), geklikVoor: schuif(r.geklikVoor || ''),
-    nummering: NUMMERING,
-  });
-  if (r.boek === 'baynatwee' && r.les >= 30) u.les = r.les + 1;
+  let u = Object.assign({}, r);
+  if ((r.nummering || 1) < 2) {
+    const schuif = k => {
+      const m = /^baynatwee-(\d+)(.*)$/.exec(String(k));
+      return m && +m[1] >= 30 ? 'baynatwee-' + (+m[1] + 1) + m[2] : k;
+    };
+    const obj = x => { const o = {}; for (const k of Object.keys(x || {})) o[schuif(k)] = x[k]; return o; };
+    u = Object.assign(u, {
+      afgerond: (u.afgerond || []).map(schuif), gelezen: (u.gelezen || []).map(schuif),
+      score: obj(u.score), hints: obj(u.hints), geklikVoor: schuif(u.geklikVoor || ''),
+    });
+    if (u.boek === 'baynatwee' && u.les >= 30) u.les = u.les + 1;
+  }
+  if ((r.nummering || 1) < 3 && u.hints) {
+    const h = {};
+    for (const k of Object.keys(u.hints)) {
+      const m = /^(baynatwee2?)-(\d+)$/.exec(k);
+      const d = m && (VRAAG_SCHUIF[m[1]] || {})[+m[2]];
+      if (!d) { h[k] = u.hints[k]; continue; }
+      h[k] = {};
+      for (const zi of Object.keys(u.hints[k] || {})) h[k][+zi + d] = u.hints[k][zi];
+    }
+    u.hints = h;
+  }
+  u.nummering = NUMMERING;
   return u;
 }
 
@@ -606,9 +630,14 @@ const BOEK_KORT = { bayna: 'ABY B1', baynatwee: 'ABY B2D1', baynatwee2: 'ABY B2D
 function plekLabel(boek, nr) {
   const h = hoofdstukVan(nr, boek), n = h ? nr - h.van + 1 : nr;
   if (boek === S.boek) return h ? 'H' + h.nr + ' les ' + n : 'les ' + n;
-  const kort = BOEK_KORT[boek] || boek;
+  let kort = BOEK_KORT[boek] || boek;
+  /* Lees je zelf in Bayna Yadayk, dan is 'ABY' overbodig: B3D1L4 zegt genoeg.
+     Vanuit Qasas of Qirāʾa blijft ABY erbij staan. */
+  const eigen = reeksVan(S.boek);
+  const aby = kort.startsWith('ABY');
+  if (aby && eigen && eigen.boeken.includes(boek)) kort = kort.slice(4);
   const plek = (h ? 'H' + h.nr : '') + 'L' + n;
-  return kort.startsWith('ABY') ? kort + plek : kort + ' ' + plek;
+  return aby ? kort + plek : kort + ' ' + plek;
 }
 
 /* Waar je een woord al eerder bent tegengekomen: in dit boek elke eerdere
@@ -886,9 +915,11 @@ addEventListener('resize', meetKop);
 addEventListener('orientationchange', meetKop);
 
 /* ---------------- woordenlijst ---------------- */
-function kaartVan(id) {
+function kaartVan(id, opt) {
   const e = lem(id);
-  const k = el('button', 'kaart' + (S.gekend.has(id) ? ' gekend' : ''));
+  opt = opt || {};
+  const kent = S.gekend.has(id);
+  const k = el('button', 'kaart' + (kent && opt.markeer ? ' kent' : ''));
   /* Het merkje zegt alleen waar het woord eerder in DIT boek stond. Kwam je
      het ook tegen in een ander boek dat je gelezen hebt, dan kleurt ⓘ en
      staat daaronder in welke boeken. Zo zie je meteen: nieuw in dit boek,
@@ -896,7 +927,10 @@ function kaartVan(id) {
   const pl = plekkenVan(id);
   const hier = pl.find(p => p.boek === S.boek);
   const elders = pl.filter(p => p.boek !== S.boek);
-  const merk = hier ? `<span class="merk">${esc(hier.label)}</span>` : '';
+  let merk = hier ? `<span class="merk">${esc(hier.label)}</span>` : '';
+  if (opt.merk !== undefined) {
+    merk = opt.merk ? `<span class="merk ${kent ? 'g' : 'o'}">${esc(opt.merk)}</span>` : '';
+  }
   k.innerHTML = `<div class="mid">
       <div class="woord">${esc(e.lemma)}</div>
       <div class="bet">${merk}${esc(e.nl)}</div>
@@ -906,7 +940,9 @@ function kaartVan(id) {
     S.gekend.has(id) ? S.gekend.delete(id) : S.gekend.add(id);
     bewaar(); teken();
   };
-  const i = el('button', 'info' + (elders.length ? ' elders' : ''), 'ⓘ');
+  /* Staat in het merkje al een ander boek, dan hoeft ⓘ niet ook nog te kleuren. */
+  const kleur = opt.merk !== undefined ? (elders.length && pl.length && pl[0].boek === S.boek) : elders.length;
+  const i = el('button', 'info' + (kleur ? ' elders' : ''), 'ⓘ');
   i.setAttribute('aria-label', 'Details van ' + e.lemma);
   if (elders.length) i.title = 'Ook gezien in: ' + elders.map(p => p.label).join(' · ');
   i.onclick = ev => { ev.stopPropagation(); toonWoord([id]); };
@@ -956,53 +992,97 @@ function vouwLade(sleutel, titel, aantal, maakInhoud) {
   return lade;
 }
 
+/* Instellingen van de woordenlijst: per apparaat bewaard. */
+const WI = (() => {
+  const st = { verberg: false, markeer: true };
+  try { Object.assign(st, JSON.parse(localStorage.getItem('qirat.woordinst') || '{}')); } catch (e) { /* geen opslag */ }
+  return st;
+})();
+function bewaarWI() { try { localStorage.setItem('qirat.woordinst', JSON.stringify(WI)); } catch (e) { /* geen opslag */ } }
+
+/* Stap Woorden: twee tabbladen.
+   Nieuw     = nog niet gekend en nog nooit eerder tegengekomen.
+   Herhaling = al eerder tegengekomen en nog niet gekend (oranje), plus alles
+               wat gekend is (groen), met de les waar het woord voor het eerst
+               stond. Gekende woorden kun je verbergen of groen laten oplichten. */
 function tekenLijst(titel, sub, metActies) {
   const sp = splitsLes(S.les);
   const blad = el('div', 'blad');
-  blad.appendChild(el('h2', null, titel));
+  const ids = { ism: [...sp.nieuw.ism, ...sp.oud.ism], fil: [...sp.nieuw.fil, ...sp.oud.fil], harf: [...sp.nieuw.harf, ...sp.oud.harf] };
+  const alle = [...ids.ism, ...ids.fil, ...ids.harf];
+  blad.appendChild(el('h2', null, `${esc(titel)} <span class="h2-tel">· ${alle.length} unieke woorden</span>`));
   if (sub) blad.appendChild(el('p', 'sub', sub));
 
-  const nTotaal = sp.telbaar.length || 1;
-  const nGekend = sp.telbaar.filter(i => S.gekend.has(i)).length;
-  blad.appendChild(el('div', 'balk', `<i style="width:${Math.round(100 * nGekend / nTotaal)}%"></i>`));
-  blad.appendChild(el('div', 'balk-tekst', `${nGekend} van ${sp.telbaar.length} woorden gekend`));
+  const nGekend = alle.filter(i => S.gekend.has(i)).length;
+  blad.appendChild(el('div', 'balk', `<i style="width:${Math.round(100 * nGekend / (alle.length || 1))}%"></i>`));
 
-  const open = g => ({
-    ism: g.ism.filter(i => !S.gekend.has(i)),
-    fil: g.fil.filter(i => !S.gekend.has(i)),
-    harf: g.harf.filter(i => !S.gekend.has(i)),
-  });
+  const eerder = id => plekkenVan(id);
+  const isNieuw = id => !S.gekend.has(id) && !eerder(id).length;
+  const per = f => ({ ism: ids.ism.filter(f), fil: ids.fil.filter(f), harf: ids.harf.filter(f) });
   const tel = g => g.ism.length + g.fil.length + g.harf.length;
+  const nieuw = per(isNieuw);
+  const herh = per(id => !isNieuw(id));
+  const nOranje = tel(per(id => !isNieuw(id) && !S.gekend.has(id)));
+  const nGroen = tel(per(id => S.gekend.has(id)));
 
-  const oNieuw = open(sp.nieuw), oOud = open(sp.oud);
-  const heeftOud = tel(sp.oud) > 0;
+  if (!S.wTab) S.wTab = 'nieuw';
+  const tabs = el('div', 'wtabs');
+  tabs.setAttribute('role', 'tablist');
+  const tab = (sleutel, naam, getallen) => {
+    const b = el('button', 'wtab' + (S.wTab === sleutel ? ' aan' : ''), `<span>${naam}</span>${getallen}`);
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', S.wTab === sleutel);
+    b.onclick = () => { S.wTab = sleutel; teken(); };
+    tabs.appendChild(b);
+  };
+  tab('nieuw', 'Nieuw', `<span class="wt-n" title="nieuwe woorden">${tel(nieuw)}</span>`);
+  tab('herh', 'Herhaling',
+    `<span class="wt-n o" title="eerder gezien, nog niet gekend">${nOranje}</span>` +
+    `<span class="wt-n g" title="bekend">${nGroen}</span>`);
+  blad.appendChild(tabs);
 
-  const wrap = el('div');
-  wrap.style.marginTop = '22px';
+  const blok = (groepen, kaart) => {
+    const kol = el('div', 'kolommen');
+    const cats = ['ism', 'fil', 'harf'].filter(c => groepen[c].length);
+    if (!cats.length) return null;
+    kol.classList.add('n' + cats.length);
+    for (const cat of cats) {
+      const c = el('div', 'kol kol-' + cat);
+      c.appendChild(el('h3', null,
+        `<span class="ar">${CATS[cat].ar}</span><span class="lat">${CATS[cat].lat}</span>` +
+        `<span class="tel">${groepen[cat].length}</span>`));
+      for (const id of groepen[cat]) c.appendChild(kaart(id));
+      kol.appendChild(c);
+    }
+    return kol;
+  };
 
-  if (heeftOud) wrap.appendChild(groepKop('Nieuw in deze les', '', tel(oNieuw)));
-  wrap.appendChild(kolommenBlok(oNieuw, null, false));
-
-  if (heeftOud) {
-    const h = groepKop('Al eerder gezien', '', tel(oOud));
-    h.style.marginTop = '30px';
-    wrap.appendChild(h);
-    wrap.appendChild(kolommenBlok(oOud, sp.herkomst, true));
+  const wrap = el('div', 'wlijst');
+  if (S.wTab === 'nieuw') {
+    const b = blok(nieuw, id => kaartVan(id, { merk: '' }));
+    wrap.appendChild(b || el('p', 'wleeg', 'Geen nieuwe woorden in deze les.'));
+  } else {
+    const sch = el('div', 'schakels');
+    const schakel = (sleutel, tekst, uit) => {
+      const r = el('button', 'schakel' + (WI[sleutel] ? ' aan' : '') + (uit ? ' grijs' : ''),
+        `<span class="sw"><i></i></span><span>${tekst}</span>`);
+      r.setAttribute('role', 'switch');
+      r.setAttribute('aria-checked', !!WI[sleutel]);
+      r.onclick = () => { WI[sleutel] = !WI[sleutel]; bewaarWI(); teken(); };
+      sch.appendChild(r);
+    };
+    schakel('verberg', 'Bekende woorden verbergen');
+    schakel('markeer', 'Bekende woorden groen markeren', WI.verberg);
+    wrap.appendChild(sch);
+    const zicht = WI.verberg ? per(id => !isNieuw(id) && !S.gekend.has(id)) : herh;
+    const b = blok(zicht, id => {
+      const pl = eerder(id);
+      return kaartVan(id, { merk: pl.length ? pl[0].label : plekLabel(S.boek, S.les), markeer: WI.markeer });
+    });
+    wrap.appendChild(b || el('p', 'wleeg', WI.verberg && nGroen
+      ? 'Alle woorden die je eerder tegenkwam, ken je al.' : 'Nog geen woorden om te herhalen.'));
   }
   blad.appendChild(wrap);
-
-  /* lade met gekende woorden van deze les */
-  const gek = {
-    ism: [...sp.nieuw.ism, ...sp.oud.ism].filter(i => S.gekend.has(i)),
-    fil: [...sp.nieuw.fil, ...sp.oud.fil].filter(i => S.gekend.has(i)),
-    harf: [...sp.nieuw.harf, ...sp.oud.harf].filter(i => S.gekend.has(i)),
-  };
-  if (tel(gek)) {
-    blad.appendChild(vouwLade('gekend', 'Gekend', tel(gek),
-      () => kolommenBlok(gek, sp.herkomst, true)));
-  }
-
-  /* De bouwsteentjes (lidwoord, voegwoorden, aanhechtsels) tonen we niet meer. */
 
   if (metActies) blad.appendChild(metActies());
   return blad;
@@ -1013,14 +1093,27 @@ function tekenLijst(titel, sub, metActies) {
    de eerste regel zonder leesteken daarna is de titel van de tekst.
    kop = de regels die geen vraag zijn maar een tussenkopje ('beantwoord…:'). */
 const VL_TUSSEN = { baynadrie: { 2: [0], 8: [2] }, baynadrie2: { 3: [2] } };   /* per boek en les: regels die ook tussenkop zijn */
-function vragenIndeling(zinnen) {
-  if (!['baynadrie', 'baynadrie2'].includes(S.boek) || !zinnen.length) return null;
+function vragenIndeling(zinnen, kopTitel) {
+  if (!zinnen.length) return null;
   const kaal = z => z.woorden.map(w => w.w).join(' ').replace(/[\u064B-\u0652\u0670]/g, '');
-  if (kaal(zinnen[0]) !== 'ما قبل القراءة') return null;
+  const k0 = kaal(zinnen[0]);
   let titel = -1;
-  for (let i = 1; i < zinnen.length; i++) {
-    if (!zinnen[i].eind && zinnen[i].regeleinde) { titel = i; break; }
-  }
+  if (['baynadrie', 'baynadrie2'].includes(S.boek) && k0 === 'ما قبل القراءة') {
+    for (let i = 1; i < zinnen.length; i++) {
+      if (!zinnen[i].eind && zinnen[i].regeleinde) { titel = i; break; }
+    }
+  } else if (['baynatwee', 'baynatwee2'].includes(S.boek) && k0 === 'تهيئة' && kopTitel) {
+    /* Boek 2: 'تَهْيِئَةٌ', de vragen, en dan de titel. Een titel kan zelf op
+       een vraagteken eindigen, dus hier zoeken we de regel die gelijk is aan
+       de titel van de les. */
+    const schoon = t => t.replace(/[\u064B-\u0652\u0670]/g, '').replace(/[؟?!.:،,]/g, '').replace(/\s+/g, ' ').trim();
+    const doel = schoon(kopTitel);
+    /* soms is de eerste vraag gelijk aan de titel (les 10): neem de laatste
+       treffer bovenin */
+    for (let i = 1; i < Math.min(zinnen.length, 40); i++) {
+      if (zinnen[i].regeleinde && schoon(kaal(zinnen[i])) === doel) titel = i;
+    }
+  } else return null;
   if (titel < 2) return null;
   const kop = new Set(), extra = (VL_TUSSEN[S.boek] || {})[S.les] || [];
   let begin = 1, n = 0;
@@ -1029,7 +1122,7 @@ function vragenIndeling(zinnen) {
     if (zinnen[i].eind === ':' || extra.includes(n)) kop.add(begin);
     begin = i + 1; n++;
   }
-  return { titel, kop };
+  return { titel, kop, titelBoven: ['baynatwee', 'baynatwee2'].includes(S.boek) };
 }
 
 function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
@@ -1046,7 +1139,7 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
   /* Boek 3 begint elke tekst met de vragen 'ما قبل القراءة' uit het blauwe
      kader, daarna de titel en dan pas de tekst. Het kader krijgt een eigen
      vlak met genummerde vragen; de titel wordt een kopregel. */
-  const vl = vragenIndeling(zinnen);
+  const vl = vragenIndeling(zinnen, titel);
   let kader = null, regel = null, vnr = 0, groep = [];
   const sluitGroep = () => {          /* één los punt krijgt geen nummer */
     if (groep.length === 1) groep[0].classList.add('vl-los');
@@ -1145,13 +1238,15 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
     if (z.koran && !perWoord) span.classList.add('koran');
     if (vl && zi <= vl.titel) {
       if (zi === 0) {
-        kader = el('div', 'vl-kader');
+        /* Boek 2: in het boek staat de titel bovenaan en het kader zonder
+           kleur; boek 3 heeft een blauw kader met de titel eronder. */
+        kader = el('div', 'vl-kader' + (vl.titelBoven ? ' kaal' : ''));
         const kop = el('div', 'vl-kop'); kop.appendChild(span);
         kader.appendChild(kop); t.appendChild(kader);
       } else if (zi === vl.titel) {
         sluitGroep();
         const tt = el('div', 'tekst-titel'); tt.appendChild(span);
-        t.appendChild(tt);
+        if (vl.titelBoven) t.insertBefore(tt, kader); else t.appendChild(tt);
       } else {
         if (!regel) {
           const tussen = vl.kop.has(zi);

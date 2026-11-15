@@ -33,6 +33,7 @@
   --carry:#2C5F6B;      /* blauwgroen — meegenomen uit vorige les */
   --merk:#C08A1E;       /* amber — woord dat je niet kent */
   --merk-vlak:#F6E7B8;
+  --groen:#3E7D3B;
   --shadow:0 1px 0 rgba(23,25,15,.06), 0 2px 8px rgba(23,25,15,.05);
   --r:3px;
   --zoom:1;
@@ -44,6 +45,7 @@ body.donker{
   --paper:#16181A; --card:#1E2124; --ink:#E8E6DF; --ink-2:#9EA49C;
   --line:#33383C; --faded:#5D6560; --rubric:#D98A93; --carry:#7FB9C6;
   --merk:#D2A93F; --merk-vlak:#4A3C18;
+  --groen:#7BBF6E;
   --ism:#5A5F51; --fil:#A8535D; --harf:#3E7B8A;
   --shadow:0 1px 0 rgba(0,0,0,.3), 0 2px 8px rgba(0,0,0,.25);
 }
@@ -163,6 +165,33 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 36px}
   border-top:2px solid var(--rubric);border-bottom:2px solid var(--rubric);
   border-radius:4px;padding:.05em .5em;margin:.2em 0 .6em;line-height:2}
 .tekst-titel .w{color:inherit}
+/* Boek 2: vragenkader zonder kleur, zoals in het boek */
+.vl-kader.kaal{background:none;border:1px solid var(--line);border-inline-start:1px solid var(--line)}
+.vl-kader.kaal .vl-kop{color:var(--ink);border-bottom-color:var(--line)}
+.vl-kader.kaal .vl-nr{background:none;color:var(--ink);border:1px solid var(--ink-2)}
+/* Stap Woorden: tabbladen Nieuw / Herhaling */
+.blad h2 .h2-tel{text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink-2);font-size:12.5px}
+.wtabs{display:flex;gap:4px;margin:18px 0 0;border-bottom:1px solid var(--line)}
+.wtab{display:flex;align-items:center;gap:7px;padding:9px 14px 8px;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14.5px;
+  color:var(--ink-2);border-bottom:2px solid transparent;margin-bottom:-1px}
+.wtab.aan{color:var(--ink);font-weight:600;border-bottom-color:var(--rubric)}
+.wt-n{font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--card);background:var(--ink);
+  border-radius:99px;padding:0 8px;line-height:19px;min-width:19px;text-align:center}
+.wt-n.o{background:var(--merk)}
+.wt-n.g{background:var(--groen)}
+.wuitleg{font-size:13px;color:var(--ink-2);margin:14px 0 14px}
+.wleeg{font-size:14px;color:var(--ink-2);margin:18px 0}
+.schakels{display:flex;flex-wrap:wrap;gap:8px 22px;margin:14px 0 16px}
+.schakel{display:flex;align-items:center;gap:9px;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13.5px;color:var(--ink);padding:2px 0}
+.schakel.grijs{opacity:.45}
+.schakel .sw{width:34px;height:20px;border-radius:99px;background:var(--line);position:relative;flex:0 0 auto;transition:background .15s}
+.schakel .sw i{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;
+  box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
+.schakel.aan .sw{background:var(--groen)}
+.schakel.aan .sw i{left:16px}
+.kaart.kent{background:color-mix(in srgb,var(--groen) 13%,transparent);box-shadow:inset 3px 0 0 var(--groen)}
+.merk.o{color:var(--merk);border-color:var(--merk)}
+.merk.g{color:var(--groen);border-color:var(--groen)}
 .w{cursor:pointer;border-radius:2px;padding:0 1px;transition:background .12s,color .12s}
 .w:hover{background:#EDEFE7}
 .w.gekend{color:var(--faded)}
@@ -293,7 +322,7 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 36px}
   display:inline-block;vertical-align:middle;margin-right:5px;font-size:9px;
   letter-spacing:.03em;color:var(--carry);
   border:1px solid var(--carry);border-radius:2px;padding:0 4px;line-height:14px;
-  font-family:'IBM Plex Sans'
+  font-family:'IBM Plex Sans',system-ui,sans-serif
 }
 .info{
   flex:0 0 auto;width:26px;height:26px;border-radius:50%;color:var(--ink-2);
