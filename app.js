@@ -569,13 +569,13 @@ function lesInHoofdstuk(nr, boek = S.boek) {
    reeks en zie je het overzicht van al haar boeken. */
 const REEKSEN = [
   { id: 'aby', naam: 'Al-ʿArabiyya bayna yadayk', ar: 'العربية بين يديك',
-    boeken: ['bayna', 'baynatwee', 'baynatwee2', 'baynadrie'] },
+    boeken: ['bayna', 'baynatwee', 'baynatwee2', 'baynadrie', 'baynadrie2'] },
   { id: 'lees', naam: 'Leesboeken', ar: 'قصص النبيين · القراءة الراشدة',
     boeken: ['qasas', 'qirat'] },
 ];
 const reeksVan = boek => REEKSEN.find(r => r.boeken.includes(boek)) || null;
 const BOEK_KORT = { bayna: 'ABY B1', baynatwee: 'ABY B2D1', baynatwee2: 'ABY B2D2',
-                    baynadrie: 'ABY B3D1', qasas: 'Qaṣaṣ', qirat: 'Qirāʾa' };
+                    baynadrie: 'ABY B3D1', baynadrie2: 'ABY B3D2', qasas: 'Qaṣaṣ', qirat: 'Qirāʾa' };
 
 /* Waar een woord staat, kort: in het eigen boek 'les 5' of 'H2 les 1',
    uit een ander boek 'ABY B2D1L2', 'Qaṣaṣ H2L1' of 'Qirāʾa L5'. */
@@ -988,9 +988,9 @@ function tekenLijst(titel, sub, metActies) {
 /* Herkent het vragenkader van Boek 3: de eerste regel is 'ما قبل القراءة',
    de eerste regel zonder leesteken daarna is de titel van de tekst.
    kop = de regels die geen vraag zijn maar een tussenkopje ('beantwoord…:'). */
-const VL_TUSSEN = { 2: [0], 8: [2] };   /* per les: regels die ook tussenkop zijn */
+const VL_TUSSEN = { baynadrie: { 2: [0], 8: [2] } };   /* per boek en les: regels die ook tussenkop zijn */
 function vragenIndeling(zinnen) {
-  if (S.boek !== 'baynadrie' || !zinnen.length) return null;
+  if (!['baynadrie', 'baynadrie2'].includes(S.boek) || !zinnen.length) return null;
   const kaal = z => z.woorden.map(w => w.w).join(' ').replace(/[\u064B-\u0652\u0670]/g, '');
   if (kaal(zinnen[0]) !== 'ما قبل القراءة') return null;
   let titel = -1;
@@ -998,7 +998,7 @@ function vragenIndeling(zinnen) {
     if (!zinnen[i].eind && zinnen[i].regeleinde) { titel = i; break; }
   }
   if (titel < 2) return null;
-  const kop = new Set(), extra = VL_TUSSEN[S.les] || [];
+  const kop = new Set(), extra = (VL_TUSSEN[S.boek] || {})[S.les] || [];
   let begin = 1, n = 0;
   for (let i = 1; i < titel; i++) {
     if (!zinnen[i].regeleinde) continue;
