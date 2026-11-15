@@ -1154,79 +1154,33 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
   /* Voorlezen. De bediening staat op de titelregel: terug, spelen, verder,
      en de snelheid. Eén stem, door de app gekozen — een keuzemenu leverde
      vooral opties op die het niet deden. */
-  const kop = el('div', 'titelrij');
-  kop.appendChild(el('h2', null, titel));
+  /* De titel van de tekst staat als rode kopregel bovenaan de tekst zelf.
+     Boek 3 heeft die al in de tekst (na het vragenkader). */
+  if (titel && !vl) {
+    const tt = el('div', 'tekst-titel');
+    tt.dir = 'auto';
+    tt.textContent = titel;
+    t.insertBefore(tt, t.firstChild);
+  }
+  /* Voorlezen: de bediening zit in de kop (knop 🔊, klapt uit). Hier alleen
+     wat die bediening van deze tekst moet weten. */
   if (Stem.kan()) {
-    const balk = el('div', 'leesbalk');
-    let plek = 0;                     /* waar je bent, ook als er niets klinkt */
-
+    const ctl = { t, plek: 0 };
     const toon = i => {
-      plek = Math.max(0, Math.min(zinnen.length - 1, i));
+      ctl.plek = Math.max(0, Math.min(zinnen.length - 1, i));
       t.querySelectorAll('.zin.klinkt').forEach(z => z.classList.remove('klinkt'));
-      const z = t.querySelector('.zin[data-zin="' + plek + '"]');
+      const z = t.querySelector('.zin[data-zin="' + ctl.plek + '"]');
       if (z) {
         z.classList.add('klinkt');
         if (z.scrollIntoView) z.scrollIntoView({ block: 'nearest' });
       }
     };
     const merk = i => { if (i >= 0) toon(i); };
-
-    const p = el('button', 'wi-kn speelknop', '&#9654;');
-    p.title = 'Voorlezen'; p.setAttribute('aria-label', 'Voorlezen');
-    const aan = () => { p.innerHTML = '&#9632;'; p.title = 'Stop'; p.classList.add('bezig'); };
-    const uit = voltooid => {
-      p.innerHTML = '&#9654;'; p.title = 'Voorlezen'; p.classList.remove('bezig');
-      if (voltooid) toon(0);
-    };
-    /* vanaf de huidige zin lezen, of daarheen springen als hij al bezig is */
-    const vanaf = i => {
-      toon(i);
-      if (Stem.bezig) Stem.speel(zinnen, merk, uit, plek);
-    };
-    p.onclick = () => {
-      if (Stem.bezig) { Stem.stop(); return; }
-      aan(); Stem.speel(zinnen, merk, uit, plek);
-    };
-
-    const stap = (teken_, naam, fn) => {
-      const b = el('button', 'wi-kn', teken_);
-      b.title = naam; b.setAttribute('aria-label', naam);
-      b.onclick = fn;
-      return b;
-    };
-    balk.appendChild(stap('&#9664;&#9664;', 'Vorige zin', () => vanaf(plek - 1)));
-    balk.appendChild(p);
-    balk.appendChild(stap('&#9654;&#9654;', 'Volgende zin', () => vanaf(plek + 1)));
-
-    const tk = el('select', 'oefen-kies tempo-kies');
-    tk.setAttribute('aria-label', 'Voorleessnelheid');
-    tk.title = 'Snelheid';
-    for (const v of TEMPOS) {
-      const o = document.createElement('option');
-      o.value = String(v);
-      o.textContent = (v === 1 ? 'normaal' : String(v).replace('.', ',') + '\u00D7');
-      if (Math.abs(v - (S.tempo || 0.9)) < 0.001) o.selected = true;
-      tk.appendChild(o);
-    }
-    tk.onchange = () => {
-      stelWeergaveIn('tempo', parseFloat(tk.value));
-      Stem.herstart();          /* klinkt er iets, dan meteen op de nieuwe snelheid */
-    };
-    balk.appendChild(tk);
-
-    /* geen bruikbare stem: knoppen uit, met de reden erachter */
-    if (!Stem.stem) {
-      const reden = Stem.lijst.length
-        ? 'Geen Arabische stem op dit toestel'
-        : 'De stemmen zijn nog niet geladen — ververs de pagina';
-      balk.querySelectorAll('button, select').forEach(b => {
-        b.disabled = true; b.title = reden;
-      });
-    }
-    kop.appendChild(balk);
+    ctl.speel = uit => Stem.speel(zinnen, merk, uit, ctl.plek);
+    ctl.vanaf = (i, uit) => { toon(i); if (Stem.bezig) Stem.speel(zinnen, merk, uit, ctl.plek); };
+    ctl.begin = () => toon(0);
+    Lees.lijst.push(ctl);
   }
-  blad.insertBefore(kop, blad.firstChild);
-
   blad.appendChild(t);
   return blad;
 }
@@ -1238,6 +1192,88 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
    niet — daar moet je hem er in de taalinstellingen bij zetten. Vindt de app
    geen Arabische stem, dan verschijnen de knoppen gewoon niet. */
 const TEMPOS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.25, 1.5];
+
+/* De voorleesbediening in de kop: één knop 🔊 die een balk uitklapt.
+   Elke getekende tekst meldt zich in Lees.lijst; de balk bedient de tekst
+   die bovenaan in beeld staat (meestal is er maar één). */
+const Lees = {
+  lijst: [], actief: null, open: false,
+  kies() {
+    if (this.actief && Stem.bezig && this.lijst.includes(this.actief)) return this.actief;
+    const top = kopHoogte();
+    return this.lijst.find(c => c.t.isConnected && c.t.getBoundingClientRect().bottom > top + 40) || this.lijst[0];
+  },
+};
+function tekenLeesPaneel() {
+  const knoppen = ['btnLees', 'btnLeesMob'].map(id => document.getElementById(id)).filter(Boolean);
+  const pan = document.getElementById('leesPaneel');
+  if (!pan) return;
+  const heeft = Stem.kan() && Lees.lijst.length > 0;
+  const open = heeft && Lees.open;
+  knoppen.forEach(k => {
+    k.hidden = !heeft;
+    k.classList.toggle('aan', open);
+    k.classList.toggle('klinkt', heeft && Stem.bezig);
+    k.setAttribute('aria-expanded', String(open));
+  });
+  pan.hidden = !open;
+  pan.innerHTML = '';
+  if (!open) { meetKop(); return; }
+
+  const balk = el('div', 'leesbalk');
+  const p = el('button', 'wi-kn speelknop', Stem.bezig ? '&#9632;' : '&#9654;');
+  p.title = 'Voorlezen'; p.setAttribute('aria-label', 'Voorlezen');
+  if (Stem.bezig) p.classList.add('bezig');
+  const aan = () => {
+    p.innerHTML = '&#9632;'; p.title = 'Stop'; p.classList.add('bezig');
+    knoppen.forEach(k => k.classList.add('klinkt'));
+  };
+  const uit = voltooid => {
+    p.innerHTML = '&#9654;'; p.title = 'Voorlezen'; p.classList.remove('bezig');
+    knoppen.forEach(k => k.classList.remove('klinkt'));
+    if (voltooid && Lees.actief) Lees.actief.begin();
+  };
+  p.onclick = () => {
+    if (Stem.bezig) { Stem.stop(); return; }
+    const c = Lees.kies(); if (!c) return;
+    Lees.actief = c; aan(); c.speel(uit);
+  };
+  const stap = (teken_, naam, d) => {
+    const b = el('button', 'wi-kn', teken_);
+    b.title = naam; b.setAttribute('aria-label', naam);
+    b.onclick = () => { const c = Lees.kies(); if (!c) return; Lees.actief = c; c.vanaf(c.plek + d, uit); };
+    return b;
+  };
+  balk.appendChild(stap('&#9664;&#9664;', 'Vorige zin', -1));
+  balk.appendChild(p);
+  balk.appendChild(stap('&#9654;&#9654;', 'Volgende zin', 1));
+
+  const tk = el('select', 'oefen-kies tempo-kies');
+  tk.setAttribute('aria-label', 'Voorleessnelheid');
+  tk.title = 'Snelheid';
+  for (const v of TEMPOS) {
+    const o = document.createElement('option');
+    o.value = String(v);
+    o.textContent = (v === 1 ? 'normaal' : String(v).replace('.', ',') + '\u00D7');
+    if (Math.abs(v - (S.tempo || 0.9)) < 0.001) o.selected = true;
+    tk.appendChild(o);
+  }
+  tk.onchange = () => {
+    stelWeergaveIn('tempo', parseFloat(tk.value));
+    Stem.herstart();
+  };
+  balk.appendChild(tk);
+
+  if (!Stem.stem) {
+    const reden = Stem.lijst.length
+      ? 'Geen Arabische stem op dit toestel'
+      : 'De stemmen zijn nog niet geladen — ververs de pagina';
+    balk.querySelectorAll('button, select').forEach(b => { b.disabled = true; b.title = reden; });
+    pan.appendChild(balk);
+    pan.appendChild(el('span', 'lees-reden', reden));
+  } else pan.appendChild(balk);
+  meetKop();
+}
 const Stem = {
   lijst: [], arabisch: [], stem: null, rij: [], idx: 0, bezig: false,
   beurt: 0,           // elke leesronde krijgt een nummer, zie speel()
@@ -2000,6 +2036,8 @@ function tekenIndex() {
 
 /* ---------------- schermen ---------------- */
 function teken() {
+  Lees.lijst = [];
+  queueMicrotask(tekenLeesPaneel);
   tekenKop();
   const m = document.getElementById('main');
   m.innerHTML = '';
@@ -2016,7 +2054,7 @@ function teken() {
 
   /* ---- stap 1: lezen en aanklikken ---- */
   if (S.stap === 0) {
-    const blad = tekenTekst(L.zinnen, lesKop() + ' — ' + L.titel,
+    const blad = tekenTekst(L.zinnen, lesKern(L.titel),
 '', true);
     const tel = el('div', 'balk-tekst');
     tel.style.marginTop = '16px';
@@ -2109,7 +2147,7 @@ function teken() {
 
   /* ---- stap 6: nog eens lezen ---- */
   else if (S.stap === 5) {
-    const blad = tekenTekst(L.zinnen, 'Herhaling — ' + L.titel,
+    const blad = tekenTekst(L.zinnen, lesKern(L.titel),
 '', true);
     const tel = el('div', 'balk-tekst');
     tel.style.marginTop = '16px';
@@ -2215,6 +2253,10 @@ document.getElementById('btnWis').onclick = async () => {
 };
 
 document.getElementById('btnWie').onclick = () => toonInlog();
+['btnLees', 'btnLeesMob'].forEach(id => {
+  const k = document.getElementById(id);
+  if (k) k.onclick = () => { Lees.open = !Lees.open; tekenLeesPaneel(); };
+});
 document.getElementById('btnMenu').onclick = () => wisselMenu('menu-open');
 document.getElementById('btnStap').onclick = () => wisselMenu('stap-open');
 /* een keuze in het menu maken sluit het; zoom en donker niet, die probeer je vaak een paar keer */

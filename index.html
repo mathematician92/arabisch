@@ -684,6 +684,13 @@ body.donker .ov-les.af{background:#4d5a44;border-color:#4d5a44}
   background:var(--card);border-bottom:1px solid var(--line)
 }
 .titelrij h2{margin:0;flex:1 1 auto;min-width:0}
+.lees-paneel{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;
+  padding:8px 12px;border-top:1px solid var(--line);background:var(--card)}
+.lees-paneel[hidden]{display:none}
+.lees-reden{font-size:12px;color:var(--ink-2)}
+.lees-knop.aan,.mob-lees.aan{background:var(--ink);color:var(--card);border-color:var(--ink)}
+.lees-knop.klinkt,.mob-lees.klinkt{box-shadow:0 0 0 2px var(--rubric)}
+.mob-lees{display:none}
 .leesbalk{display:flex;align-items:center;gap:3px;flex:0 0 auto}
 .leesbalk .wi-kn{
   min-width:36px;height:34px;padding:0 8px;font-size:11px;
@@ -729,6 +736,10 @@ body.donker .ov-les.af{background:#4d5a44;border-color:#4d5a44}
   .mob-stap{flex:0 0 auto;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:var(--r);
     background:var(--card);font-size:12.5px;color:var(--ink);white-space:nowrap}
   .mob-stap[aria-expanded="true"]{border-color:var(--rubric);color:var(--rubric)}
+  .mob-lees{display:block;flex:0 0 auto;width:38px;height:34px;border:1px solid var(--line);border-radius:var(--r);
+    background:var(--card);font-size:16px;line-height:1;color:var(--ink)}
+  .mob-lees[hidden]{display:none}
+  header .lees-knop{display:none}
   header .hwrap{display:none;padding-bottom:10px}
   header.menu-open .hwrap{display:flex}
   /* menu: boek en les elk op een eigen hele regel, de knoppen netjes eronder */
@@ -759,6 +770,7 @@ body.donker .ov-les.af{background:#4d5a44;border-color:#4d5a44}
   <div class="mobbalk">
     <button class="mob-menu" id="btnMenu" aria-label="Menu" aria-expanded="false">&#9776;</button>
     <span class="mob-titel" id="mobTitel"></span>
+    <button class="mob-lees" id="btnLeesMob" hidden aria-label="Voorlezen" aria-expanded="false">&#128264;</button>
     <button class="mob-stap" id="btnStap" aria-expanded="false"></button>
   </div>
   <div class="hwrap">
@@ -769,6 +781,7 @@ body.donker .ov-les.af{background:#4d5a44;border-color:#4d5a44}
       </div>
       <div class="knop-groep">
       <button class="kop-knop wie-knop" id="btnWie" hidden></button>
+      <button class="kop-knop lees-knop" id="btnLees" hidden aria-label="Voorlezen" aria-expanded="false">&#128264; Voorlezen</button>
       <button class="kop-knop" id="btnOverzicht">Overzicht</button>
       <button class="kop-knop" id="btnIndex">Mijn woorden</button>
       <div class="weergave">
@@ -780,6 +793,7 @@ body.donker .ov-les.af{background:#4d5a44;border-color:#4d5a44}
     </div>
   </div>
   <nav class="stappen" id="stappen"></nav>
+  <div class="lees-paneel" id="leesPaneel" hidden></div>
 </header>
 
 <main id="main"></main>
