@@ -78,11 +78,32 @@ const Opslag = {
 const SLEUTEL = 'qirat.v2.lokaal';
 const WIE = 'qirat.wie';   // wie er op dit apparaat het laatst inlogde
 
+/* Boek 2 deel 1: dars 96 is later ingevoegd als les 30. De oude les 30 en 31
+   (dars 98 en 101) heten nu les 31 en 32. Voortgang van vóór die tijd (zonder
+   'nummering') schuiven we één keer mee op, of hij nu van dit apparaat komt of
+   uit de wolk. */
+const NUMMERING = 2;
+function omnummer(r) {
+  if (!r || !Object.keys(r).length || (r.nummering || 1) >= NUMMERING) return r;
+  const schuif = k => {
+    const m = /^baynatwee-(\d+)(.*)$/.exec(String(k));
+    return m && +m[1] >= 30 ? 'baynatwee-' + (+m[1] + 1) + m[2] : k;
+  };
+  const obj = x => { const u = {}; for (const k of Object.keys(x || {})) u[schuif(k)] = x[k]; return u; };
+  const u = Object.assign({}, r, {
+    afgerond: (r.afgerond || []).map(schuif), gelezen: (r.gelezen || []).map(schuif),
+    score: obj(r.score), hints: obj(r.hints), geklikVoor: schuif(r.geklikVoor || ''),
+    nummering: NUMMERING,
+  });
+  if (r.boek === 'baynatwee' && r.les >= 30) u.les = r.les + 1;
+  return u;
+}
+
 function pak() {
   return {
     gekend: [...S.gekend], afgerond: [...S.afgerond], oefen: S.oefen, hints: S.hints,
     moeilijk: [...S.moeilijk], gelezen: [...S.gelezen], score: S.score,
-    boek: S.boek, les: S.les, stap: S.stap, bijgewerkt: Date.now(),
+    boek: S.boek, les: S.les, stap: S.stap, bijgewerkt: Date.now(), nummering: NUMMERING,
     /* Wat je in stap 1 of 6 hebt aangetikt is nog niet vastgelegd — dat
        gebeurt pas met de knop onderaan. Toch bewaren we het, met een merkje
        erbij van welke les en welke stap het was, zodat een onderbroken
@@ -92,6 +113,7 @@ function pak() {
   };
 }
 function zet(r) {
+  r = omnummer(r) || {};
   S.gekend = new Set(r.gekend || []);
   S.afgerond = new Set(r.afgerond || []);
   S.oefen = r.oefen || {};
@@ -130,6 +152,7 @@ function bewaar() {
    samengevoegd in plaats van overschreven: dan kan werk niet verdwijnen.
    Alleen de moeilijke lijst kun je afvinken, daar telt de nieuwste versie. */
 function samenvoeg(a, b) {
+  a = omnummer(a); b = omnummer(b);
   if (!a || !Object.keys(a).length) return b || {};
   if (!b || !Object.keys(b).length) return a;
   const unie = (x, y) => [...new Set([...(x || []), ...(y || [])])];
@@ -160,6 +183,7 @@ function samenvoeg(a, b) {
     /* een halve leesbeurt is van één apparaat: die van het nieuwste telt */
     geklikt: nieuwste.geklikt || [], geklikVoor: nieuwste.geklikVoor || '',
     bijgewerkt: Math.max(a.bijgewerkt || 0, b.bijgewerkt || 0),
+    nummering: NUMMERING,
   };
 }
 
