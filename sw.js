@@ -11,7 +11,7 @@
 
    VERSIE ophogen bij elke levering: dat ruimt de oude kast op.
 */
-const VERSIE = 'v49';
+const VERSIE = 'v50';
 const SCHIL = 'qiraa-schil-' + VERSIE;
 const SPUL = 'qiraa-spul-' + VERSIE;
 

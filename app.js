@@ -2015,7 +2015,7 @@ function volgendeVraag() {
 }
 
 /* de knoppen bovenaan: Overhoren plus de extra oefeningen */
-const OEF_MODI = [['ovh', 'Overhoren'], ['paren', 'Paren'], ['flits', 'Flitskaarten'],
+const OEF_MODI = [['ovh', 'Overhoren'], ['paren', 'Paren'], ['flits', 'Flitskaarten'], ['zb', 'Zinnen bouwen'],
                   ['ww', 'Werkwoordvormen'], ['stam', 'Stamletters']];
 function modiBalk() {
   const b = el('div', 'ov-modi');
@@ -2034,6 +2034,7 @@ function tekenOefening() {
   const m = S.ovModus || 'ovh';
   if (m === 'paren') tekenParen(blad);
   else if (m === 'flits') tekenFlits(blad);
+  else if (m === 'zb') tekenZinnenBouwen(blad);
   else if (m === 'ww') tekenVormVraag(blad, 'ww');
   else if (m === 'stam') tekenVormVraag(blad, 'stam');
   else tekenOverhoren(blad);
@@ -2310,6 +2311,135 @@ function tekenFlits(blad) {
     const om = el('button', 'knop', 'Draai om');
     om.onclick = () => { F.om = true; teken(); };
     a.appendChild(om);
+  }
+  blad.appendChild(a);
+}
+
+/* ---------------- zinnen bouwen ----------------
+   De Nederlandse zin staat erboven; tik de Arabische woorden in de goede
+   volgorde. Alleen zinnen van 3 tot 8 woorden uit de les, in rondes van
+   tien. Fout of "Weet ik niet" komt in dezelfde ronde terug. */
+function zbZinnen() {
+  const L = les(S.les), uit = [];
+  L.zinnen.forEach((z, i) => {
+    const n = z.woorden.length;
+    if (n < 3 || n > 8 || !z.nl) return;
+    if (!z.woorden.every(w => /[ء-ي]/.test(w.w))) return;
+    /* alle woorden gelijk (zoals een herhaald woord) heeft geen zin */
+    if (new Set(z.woorden.map(w => w.w)).size < 2) return;
+    uit.push(i);
+  });
+  return uit;
+}
+function zbNieuweVraag(Z) {
+  const zi = Z.rij[0];
+  const z = les(S.les).zinnen[zi];
+  let volg = meng([...z.woorden.keys()]);
+  /* niet toevallig al in de goede volgorde */
+  for (let k = 0; k < 5 && volg.every((v, i) => z.woorden[v].w === z.woorden[i].w); k++) volg = meng(volg);
+  Z.vraag = { zi, z, volg, gelegd: [], uitkomst: null };
+}
+function tekenZinnenBouwen(blad) {
+  const sk = lesSleutel() + '~zb';
+  let Z = S.zb;
+  const startRonde = () => {
+    Z.nr++;
+    Z.woorden = Z.volgorde.slice((Z.nr - 1) * RONDE, Z.nr * RONDE);
+    Z.rij = meng(Z.woorden); Z.uitslag = {};
+    if (Z.rij.length) zbNieuweVraag(Z); else Z.vraag = null;
+  };
+  if (!Z || Z.sleutel !== sk) {
+    Z = S.zb = { sleutel: sk, volgorde: meng(zbZinnen()), nr: 0 };
+    startRonde();
+  }
+  if (!Z.volgorde.length) { blad.appendChild(el('p', 'sub', 'In deze les staan geen zinnen die kort genoeg zijn om te bouwen.')); return; }
+  const totaal = Math.ceil(Z.volgorde.length / RONDE);
+  blad.appendChild(el('p', 'sub ov-uitleg', `Alle ${Z.volgorde.length} korte zinnen van deze les, in rondes van ${RONDE}.`));
+  blad.appendChild(stippenRij(Z.woorden, Z.uitslag, Z.rij, `Ronde ${Z.nr} van ${totaal}`));
+
+  /* ronde klaar */
+  if (!Z.vraag) {
+    const goed = Z.woorden.filter(i => Z.uitslag[i] === 'goed').length;
+    const laatste = Z.nr >= totaal;
+    const k = el('div', 'vraagkaart ronde-klaar');
+    k.appendChild(el('div', 'vraag-kop', laatste ? 'Klaar — alle zinnen gehad' : `Ronde ${Z.nr} klaar`));
+    k.appendChild(el('p', null, `<b>${goed}</b> meteen goed, <b>${Z.woorden.length - goed}</b> na herhaling.` +
+      (laatste ? '' : ` Nog ${totaal - Z.nr} ${totaal - Z.nr === 1 ? 'ronde' : 'rondes'}.`)));
+    blad.appendChild(k);
+    const a = el('div', 'acties');
+    if (!laatste) {
+      const n = el('button', 'knop', 'Volgende ronde');
+      n.onclick = () => { startRonde(); teken(); window.scrollTo(0, 0); };
+      a.appendChild(n);
+    } else {
+      const o = el('button', 'knop', 'Opnieuw van voren');
+      o.onclick = () => { S.zb = null; teken(); window.scrollTo(0, 0); };
+      a.appendChild(o);
+    }
+    const t = el('button', 'knop zacht', 'Naar Overhoren');
+    t.onclick = () => { S.ovModus = 'ovh'; teken(); window.scrollTo(0, 0); };
+    a.appendChild(t);
+    blad.appendChild(a);
+    return;
+  }
+
+  const V = Z.vraag, z = V.z, klaar = V.uitkomst != null;
+  const kaart = el('div', 'vraagkaart');
+  kaart.appendChild(el('div', 'vraag-kop', 'Zet de woorden in de goede volgorde'));
+  kaart.appendChild(el('div', 'zb-nl', esc(z.nl)));
+  const regel = el('div', 'zb-regel' + (V.uitkomst === 'goed' ? ' goed' : klaar ? ' mis' : ''));
+  V.gelegd.forEach((wi, pos) => {
+    const fout = klaar && V.uitkomst !== 'goed' && z.woorden[wi].w !== z.woorden[pos].w;
+    const t = el('button', 'zb-tegel' + (fout ? ' f' : ''), esc(z.woorden[wi].w));
+    t.disabled = klaar;
+    t.onclick = () => { V.gelegd.splice(pos, 1); teken(); };
+    regel.appendChild(t);
+  });
+  kaart.appendChild(regel);
+  if (!klaar) {
+    const tg = el('div', 'zb-tegels');
+    for (const wi of V.volg) {
+      const weg = V.gelegd.includes(wi);
+      const t = el('button', 'zb-tegel' + (weg ? ' leeg' : ''), esc(z.woorden[wi].w));
+      t.disabled = weg;
+      t.onclick = () => { V.gelegd.push(wi); teken(); };
+      tg.appendChild(t);
+    }
+    kaart.appendChild(tg);
+  } else {
+    const goedeZin = z.woorden.map(w => esc(w.w)).join(' ') + esc(z.eind || '');
+    kaart.appendChild(el('div', 'uitleg', V.uitkomst === 'goed'
+      ? '<b class="ok">Goed!</b>'
+      : `<b class="nok">${V.uitkomst === 'weet' ? 'Het antwoord' : 'Niet helemaal.'}</b> Zo is het goed:` +
+        `<div class="zb-goedzin">${goedeZin}</div><div class="klein">Deze zin komt later in de ronde terug.</div>`));
+  }
+  blad.appendChild(kaart);
+
+  const a = el('div', 'acties');
+  const beoordeel = uitkomst => {
+    V.uitkomst = uitkomst;
+    if (uitkomst === 'goed') { if (!Z.uitslag[V.zi]) Z.uitslag[V.zi] = 'goed'; else if (Z.uitslag[V.zi] === 'mis') Z.uitslag[V.zi] = 'herhaald'; }
+    else Z.uitslag[V.zi] = 'mis';
+    teken();
+  };
+  if (!klaar) {
+    const vol = V.gelegd.length === z.woorden.length;
+    const c = el('button', 'knop' + (vol ? '' : ' zacht'), 'Controleer');
+    c.disabled = !vol;
+    c.onclick = () => beoordeel(V.gelegd.every((wi, pos) => z.woorden[wi].w === z.woorden[pos].w) ? 'goed' : 'mis');
+    a.appendChild(c);
+    const w = el('button', 'knop zacht', 'Weet ik niet');
+    w.onclick = () => { V.gelegd = [...z.woorden.keys()]; beoordeel('weet'); };
+    a.appendChild(w);
+  } else {
+    const n = el('button', 'knop', 'Volgende');
+    n.onclick = () => {
+      const kop = Z.rij.shift();
+      if (Z.uitslag[kop] === 'mis') Z.rij.splice(Math.min(Z.rij.length, 2 + Math.floor(Math.random() * 2)), 0, kop);
+      if (Z.rij.length) zbNieuweVraag(Z); else Z.vraag = null;
+      teken(); window.scrollTo(0, 0);
+    };
+    a.appendChild(n);
   }
   blad.appendChild(a);
 }
