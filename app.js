@@ -32,7 +32,7 @@ const S = {
   klaar: false,    // hele zin zichtbaar
   lades: {},       // welke laden openstaan (niet bewaard: standaard dicht)
   scherm: 'les',   // 'les' of 'lijst' — Mijn woorden staat naast de lessen
-  wi: { bereik: 'gekend', boek: 'alles', op: 'woord', zoek: '', soort: 'alles', wazn: 'alles' },
+  wi: { bereik: 'gekend', boek: 'alles', op: 'woord', zoek: '', soort: 'alles', wazn: 'alles', zwak: 'alles' },
 };
 
 /* De nummers in S.stap zijn vast (0..5, ook in de bewaarde voortgang); de
@@ -2571,6 +2571,74 @@ function waznVan(e) {
   return w;
 }
 
+/* Bij wazn I de klinker van de مضارع (باب): يَفْعُلُ, يَفْعِلُ of يَفْعَلُ.
+   We kijken naar de klinker op de middelste stamletter in de مضارع zoals
+   die in de bank staat (dat is ook wat de vervoeging gebruikt). */
+function babVan(e) {
+  if (waznVan(e) !== 'I') return null;
+  if (e._bab !== undefined) return e._bab;
+  const m = (e.mudari || '').normalize('NFC');
+  const r = STAM_N(e.root || '');
+  /* letters met hun tekens: [letter, tekens] */
+  const lt = [];
+  for (const ch of m) {
+    if (/[ً-ْٰ]/.test(ch)) { if (lt.length) lt[lt.length - 1][1] += ch; }
+    else lt.push([ch, '']);
+  }
+  let bab = null;
+  const kl = t => t.includes('ُ') ? 'u' : t.includes('ِ') ? 'i' : t.includes('َ') ? 'a' : null;
+  /* hol: يَقُولُ / يَبِيعُ / يَنَامُ — de lange klinker na de eerste stamletter */
+  if (lt.length >= 3) {
+    const [, t1] = lt[1], [c2] = lt[2];
+    if (c2 === 'و' && kl(t1) === 'u') bab = 'u';
+    else if (c2 === 'ي' && kl(t1) === 'i' && r[1] !== 'ي' + '') bab = 'i';
+    else if (c2 === 'ا' && kl(t1) === 'a') bab = 'a';
+    else if (c2 === 'ي' && kl(t1) === 'i') bab = 'i';
+  }
+  if (!bab) {
+    /* gewoon: de klinker op de derde letter (ي ك ت ب → ت), bij مثال
+       zonder و (يَصِلُ: ص is de tweede letter) of verdubbeld (يَمُدُّ) */
+    if (/^[وي]/.test(r) && lt.length >= 3 && lt[1][0] !== 'و' && lt[1][0] !== 'ي' && !lt[1][1].includes('ْ')) bab = kl(lt[1][1]);
+    else if (r[1] === r[2] && lt.length >= 3 && lt[2][1].includes('ّ')) bab = kl(lt[1][1]);
+    else if (lt.length >= 3) bab = kl(lt[2][1]);
+  }
+  if (!bab) bab = e.ft === 'ضمة' ? 'u' : e.ft === 'كسرة' ? 'i' : e.ft === 'فتحة' ? 'a' : null;
+  e._bab = bab;
+  return bab;
+}
+const BAB = { u: ['يَفْعُلُ', 'اُفْعُلْ'], i: ['يَفْعِلُ', 'اِفْعِلْ'], a: ['يَفْعَلُ', 'اِفْعَلْ'] };
+
+/* Zwakke werkwoorden: uit de stamletters. Een werkwoord kan in meer dan één
+   soort vallen (أَتَى is مهموز én ناقص). سالم = geen van alle. */
+const ZWAK = [
+  ['salim', 'سالم', 'gezond'], ['ajwaf', 'أجوف', 'zwakke middelste letter'], ['naqis', 'ناقص', 'zwakke laatste letter'],
+  ['mudaaf', 'مضعّف', 'laatste twee letters gelijk'], ['mithal', 'مثال', 'zwakke eerste letter'],
+  ['mahmuz', 'مهموز', 'met een hamza'], ['lafif_q', 'لفيف مقرون', 'middelste en laatste zwak'],
+  ['lafif_m', 'لفيف مفروق', 'eerste en laatste zwak'], ['ruba', 'رباعي', 'stam van vier letters'],
+];
+function zwakVan(e) {
+  if (!e || e.cat !== 'fil') return [];
+  if (e._zwak) return e._zwak;
+  const r = STAM_N(e.root || '');
+  const uit = [];
+  if (r.length === 4) uit.push('ruba');
+  else if (r.length === 3) {
+    const z = [...r].map(c => c === 'و' || c === 'ي');
+    if (z[0] && z[2]) uit.push('lafif_m');
+    else if (z[1] && z[2]) uit.push('lafif_q');
+    else {
+      if (z[0]) uit.push('mithal');
+      if (z[1]) uit.push('ajwaf');
+      if (z[2]) uit.push('naqis');
+    }
+    if (r[1] === r[2] && !z[2]) uit.push('mudaaf');
+    if (r.includes('ء')) uit.push('mahmuz');
+    if (!uit.length) uit.push('salim');
+  }
+  e._zwak = uit;
+  return uit;
+}
+
 function tekenIndex() {
   const wi = S.wi;
   const blad = el('div', 'blad');
@@ -2583,7 +2651,7 @@ function tekenIndex() {
   const zoekAr = sorteersleutel(wi.zoek.trim());
   const zoekNl = wi.zoek.trim().toLowerCase();
   const rijen = [];
-  const waznTel = {};
+  const waznTel = {}, zwakTel = {};
   for (const id of bron) {
     const e = lem(id);
     /* bouwsteentjes horen hier net zomin thuis als in de voortgangsbalk */
@@ -2594,8 +2662,18 @@ function tekenIndex() {
     if (wi.zoek.trim() && !k.includes(zoekAr) &&
         !(e.nl || '').toLowerCase().includes(zoekNl)) continue;
     if (wi.soort !== 'alles' && e.cat !== wi.soort) continue;
-    if (e.cat === 'fil') waznTel[waznVan(e)] = (waznTel[waznVan(e)] || 0) + 1;
-    if (wi.soort === 'fil' && wi.wazn !== 'alles' && waznVan(e) !== wi.wazn) continue;
+    if (wi.soort === 'fil') {
+      /* wazn: 'I' is heel wazn I, 'I-u' / 'I-i' / 'I-a' één باب daarvan */
+      const wz = waznVan(e), bab = babVan(e);
+      const waznOk = wi.wazn === 'alles' || wi.wazn === wz || wi.wazn === 'I-' + bab;
+      const zwakOk = wi.zwak === 'alles' || zwakVan(e).includes(wi.zwak);
+      if (zwakOk) {
+        waznTel[wz] = (waznTel[wz] || 0) + 1;
+        if (bab) waznTel['I-' + bab] = (waznTel['I-' + bab] || 0) + 1;
+      }
+      if (waznOk) for (const z of zwakVan(e)) zwakTel[z] = (zwakTel[z] || 0) + 1;
+      if (!waznOk || !zwakOk) continue;
+    }
     rijen.push({ id, e, k });
   }
   rijen.sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
@@ -2661,16 +2739,37 @@ function tekenIndex() {
       wz.appendChild(o);
     };
     opt('alles', 'Alle wazns');
-    for (const [code, madi] of WAZNS) if (waznTel[code] || wi.wazn === code) opt(code, `${code} · ${madi} (${waznTel[code] || 0})`);
+    for (const [code, madi] of WAZNS) {
+      if (waznTel[code] || wi.wazn === code) opt(code, `${code} · ${madi} (${waznTel[code] || 0})`);
+      if (code === 'I') for (const b of ['u', 'i', 'a']) {
+        const c = 'I-' + b;
+        if (waznTel[c] || wi.wazn === c) opt(c, `\u00a0\u00a0\u00a0I · ${BAB[b][0]} (${waznTel[c] || 0})`);
+      }
+    }
     wz.onchange = () => { wi.wazn = wz.value; teken(); };
     balk2.appendChild(wz);
+    /* zwakke werkwoorden */
+    const zw = el('select', 'les-kies wazn-kies');
+    zw.setAttribute('aria-label', 'Filter op soort werkwoord');
+    zw.style.marginLeft = '0';
+    const zopt = (waarde, tekst) => {
+      const o = document.createElement('option');
+      o.value = waarde; o.textContent = tekst;
+      if (wi.zwak === waarde) o.selected = true;
+      zw.appendChild(o);
+    };
+    zopt('alles', 'Alle soorten werkwoord');
+    for (const [code, ar, nl] of ZWAK) if (zwakTel[code] || wi.zwak === code) zopt(code, `${ar} — ${nl} (${zwakTel[code] || 0})`);
+    zw.onchange = () => { wi.zwak = zw.value; teken(); };
+    balk2.appendChild(zw);
   }
   blad.appendChild(balk2);
-  const metVormen = wi.soort === 'fil' && wi.wazn !== 'alles';
-  if (metVormen) {
-    const [code, madi, mud, amr] = WAZNS.find(x => x[0] === wi.wazn);
-    const mudTekst = code === 'I' ? 'يَفْعُلُ / يَفْعِلُ / يَفْعَلُ' : mud;
-    const amrTekst = code === 'I' ? 'اُفْعُلْ / اِفْعِلْ / اِفْعَلْ' : amr;
+  const metVormen = wi.soort === 'fil' && (wi.wazn !== 'alles' || wi.zwak !== 'alles');
+  if (wi.soort === 'fil' && wi.wazn !== 'alles') {
+    const bab = wi.wazn.startsWith('I-') ? wi.wazn.slice(2) : null;
+    const [code, madi, mud, amr] = WAZNS.find(x => x[0] === (bab ? 'I' : wi.wazn));
+    const mudTekst = bab ? BAB[bab][0] : code === 'I' ? 'يَفْعُلُ / يَفْعِلُ / يَفْعَلُ' : mud;
+    const amrTekst = bab ? BAB[bab][1] : code === 'I' ? 'اُفْعُلْ / اِفْعِلْ / اِفْعَلْ' : amr;
     blad.appendChild(el('div', 'wazn-patroon',
       `<span class="lbl">ماضٍ</span><span class="ar">${madi}</span>` +
       `<span class="lbl">مُضارِع</span><span class="ar">${mudTekst}</span>` +
