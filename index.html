@@ -378,6 +378,16 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 36px}
 .zin-ar{font-family:'Scheherazade New',serif;font-size:25px;line-height:2;direction:rtl;text-align:right;margin-bottom:8px}
 .zin-ar b{color:var(--rubric);font-weight:700}
 .zin-nl{font-family:'Newsreader',Georgia,serif;font-size:16px;line-height:1.5;color:var(--ink)}
+/* betere vertaling insturen */
+.vv-blok{margin-top:6px}
+.vv-knop{font-size:12.5px;color:var(--ink-2);text-decoration:underline;background:none;border:0;padding:4px 0;cursor:pointer}
+.vv-knop:hover{color:var(--rubric)}
+.vv-eigen{font-family:'Newsreader',Georgia,serif;font-size:15px;line-height:1.45;color:var(--groen);margin:4px 0}
+.vv-tekst{width:100%;box-sizing:border-box;font:inherit;font-size:15px;line-height:1.45;padding:8px 10px;border:1px solid var(--line);
+  border-radius:var(--r);background:var(--card);color:var(--ink);resize:vertical}
+.vv-rij{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.vv-doos{max-width:640px;width:calc(100% - 32px);text-align:left}
+.vv-alles{font-size:13px;font-family:ui-monospace,Menlo,monospace}
 .tabelknop{font-size:12px;color:var(--carry);text-decoration:underline;text-underline-offset:2px;padding:4px 0}
 table.vv{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
 table.vv th{text-align:left;font-weight:500;color:var(--ink-2);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:4px 6px 4px 0}
@@ -970,6 +980,7 @@ button.pil-ev{cursor:pointer;border-color:var(--carry)}
 
 <footer class="voet">
   <span class="wolk-staat" id="wolkStaat" hidden><i></i><span></span></span>
+  <button id="btnVoorstel" hidden>Vertaalvoorstellen</button>
   <button id="btnWis">Alles wissen</button>
 </footer>
 

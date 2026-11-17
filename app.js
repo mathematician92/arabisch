@@ -129,6 +129,7 @@ function pak() {
     moeilijk: [...S.moeilijk], gelezen: [...S.gelezen], score: S.score,
     boek: S.boek, les: S.les, stap: S.stap, bijgewerkt: Date.now(), nummering: NUMMERING,
     gewist: S.gewist || 0,      /* moment van 'Alles wissen' */
+    vertaal: S.vertaal || {},   /* ingestuurde betere vertalingen */
     /* Wat je in stap 1 of 6 hebt aangetikt is nog niet vastgelegd — dat
        gebeurt pas met de knop onderaan. Toch bewaren we het, met een merkje
        erbij van welke les en welke stap het was, zodat een onderbroken
@@ -149,6 +150,7 @@ function zet(r) {
   S.geklikt = new Set(r.geklikt || []);
   S.geklikBij = r.geklikVoor || '';
   S.gewist = r.gewist || 0;
+  S.vertaal = r.vertaal || {};
 }
 
 /* het aangetikte hoort bij één les en één stap; ergens anders is het niet geldig */
@@ -182,7 +184,8 @@ function samenvoeg(a, b) {
   /* 'Alles wissen' gaat voor: wat van vóór het wissen is (een apparaat dat het
      wissen nog niet had gezien) telt niet meer mee, anders komt alles terug */
   const gewist = Math.max((a && a.gewist) || 0, (b && b.gewist) || 0);
-  const leeg = x => ({ boek: x.boek, les: x.les, stap: x.stap, bijgewerkt: 0, gewist, nummering: NUMMERING });
+  /* de vertaalvoorstellen horen niet bij de voortgang: die blijven */
+  const leeg = x => ({ boek: x.boek, les: x.les, stap: x.stap, bijgewerkt: 0, gewist, nummering: NUMMERING, vertaal: x.vertaal });
   if (a && Object.keys(a).length && (a.gewist || 0) < gewist) a = leeg(a);
   if (b && Object.keys(b).length && (b.gewist || 0) < gewist) b = leeg(b);
   if (!a || !Object.keys(a).length) return b || {};
@@ -217,6 +220,11 @@ function samenvoeg(a, b) {
     bijgewerkt: Math.max(a.bijgewerkt || 0, b.bijgewerkt || 0),
     nummering: NUMMERING,
     gewist,
+    vertaal: (() => {           /* per zin het nieuwste voorstel */
+      const v = Object.assign({}, a.vertaal || {});
+      for (const [k, x] of Object.entries(b.vertaal || {})) if (!v[k] || (x.t || 0) >= (v[k].t || 0)) v[k] = x;
+      return v;
+    })(),
   };
 }
 
@@ -1618,6 +1626,82 @@ function wwRegel(v, id) {
   return r;
 }
 
+/* ---------------- betere vertaling insturen ----------------
+   Onder de vertaling van een zin: een eigen voorstel typen. Het wordt bewaard
+   bij de voortgang (dus ook online, met een naam), en onderaan de pagina staat
+   een lijst die je in één keer kunt kopiëren en aan Claude kunt geven. */
+const zinSleutel = zin => lesSleutel() + '|' + zin.woorden.map(w => w.w).join(' ');
+function vertaalVoorstel(zin) {
+  if (!S.vertaal) S.vertaal = {};
+  const k = zinSleutel(zin), had = S.vertaal[k];
+  const w = el('div', 'vv-blok');
+  const toon = () => {
+    w.innerHTML = '';
+    const nu = S.vertaal[k];
+    if (nu) w.appendChild(el('div', 'vv-eigen', '<span class="klein">Jouw voorstel:</span> ' + esc(nu.nl)));
+    const b = el('button', 'vv-knop', nu ? 'Voorstel aanpassen' : 'Betere vertaling?');
+    b.onclick = () => {
+      w.innerHTML = '';
+      const t = document.createElement('textarea');
+      t.className = 'vv-tekst'; t.rows = 3; t.value = (nu && nu.nl) || zin.nl;
+      w.appendChild(t);
+      const rij = el('div', 'vv-rij');
+      const ok = el('button', 'knop', 'Bewaren');
+      ok.onclick = () => {
+        const v = t.value.trim();
+        if (v && v !== zin.nl) S.vertaal[k] = { nl: v, oud: zin.nl, t: Date.now() };
+        else delete S.vertaal[k];
+        bewaar(); tekenVoet(); toon();
+      };
+      const weg = el('button', 'knop zacht', nu ? 'Voorstel weghalen' : 'Annuleren');
+      weg.onclick = () => { if (nu) { delete S.vertaal[k]; bewaar(); tekenVoet(); } toon(); };
+      rij.appendChild(ok); rij.appendChild(weg);
+      w.appendChild(rij);
+      t.focus();
+    };
+    w.appendChild(b);
+  };
+  toon();
+  return w;
+}
+/* onderaan de pagina: 'Vertaalvoorstellen (3)' met een kopieerknop */
+function tekenVoet() {
+  const k = document.getElementById('btnVoorstel');
+  if (!k) return;
+  const n = Object.keys(S.vertaal || {}).length;
+  k.hidden = !n;
+  k.textContent = 'Vertaalvoorstellen (' + n + ')';
+}
+function toonVoorstellen() {
+  const lijst = Object.entries(S.vertaal || {}).sort((a, b) => (a[1].t || 0) - (b[1].t || 0));
+  const tekst = lijst.map(([k, v]) => {
+    const [les, ar] = [k.slice(0, k.indexOf('|')), k.slice(k.indexOf('|') + 1)];
+    return `${les}\n${ar}\nwas:  ${v.oud}\nwordt: ${v.nl}`;
+  }).join('\n\n');
+  const o = el('div', 'inlog');
+  const d = el('div', 'inlog-doos vv-doos');
+  d.appendChild(el('h2', null, 'Vertaalvoorstellen'));
+  d.appendChild(el('p', 'sub', 'Kopieer deze lijst en plak hem in het gesprek met Claude. Na de volgende levering staan ze in de app en kun je ze hier weghalen.'));
+  const t = document.createElement('textarea');
+  t.className = 'vv-tekst vv-alles'; t.rows = 12; t.readOnly = true; t.value = tekst;
+  d.appendChild(t);
+  const rij = el('div', 'vv-rij');
+  const kop = el('button', 'knop', 'Kopiëren');
+  kop.onclick = async () => {
+    try { await navigator.clipboard.writeText(tekst); kop.textContent = 'Gekopieerd'; }
+    catch (e) { t.select(); document.execCommand && document.execCommand('copy'); kop.textContent = 'Gekopieerd'; }
+  };
+  const leeg = el('button', 'knop zacht', 'Alles weghalen');
+  leeg.onclick = () => { if (!confirm('Alle vertaalvoorstellen weghalen?')) return; S.vertaal = {}; bewaar(); tekenVoet(); o.remove(); };
+  const dicht = el('button', 'knop zacht', 'Sluiten');
+  dicht.onclick = () => o.remove();
+  rij.appendChild(kop); rij.appendChild(leeg); rij.appendChild(dicht);
+  d.appendChild(rij);
+  o.appendChild(d);
+  o.onclick = ev => { if (ev.target === o) o.remove(); };
+  document.body.appendChild(o);
+}
+
 function toonWoord(ids, zin, wi, zinEl, wEl) {
   const p = document.getElementById('paneelInhoud');
   p.innerHTML = '';
@@ -1638,6 +1722,7 @@ function toonWoord(ids, zin, wi, zinEl, wEl) {
     });
     d.appendChild(ar);
     if (zin.nl) d.appendChild(el('div', 'zin-nl', esc(zin.nl)));
+    if (zin.nl) d.appendChild(vertaalVoorstel(zin));
     p.appendChild(d);
   }
 
@@ -3232,6 +3317,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 function teken() {
   planPlek();
+  tekenVoet();
   Lees.lijst = [];
   queueMicrotask(tekenLeesPaneel);
   tekenKop();
@@ -3452,6 +3538,7 @@ document.getElementById('btnWis').onclick = async () => {
 };
 
 document.getElementById('btnWie').onclick = () => toonInlog();
+if (document.getElementById('btnVoorstel')) document.getElementById('btnVoorstel').onclick = toonVoorstellen;
 ['btnLees', 'btnLeesMob'].forEach(id => {
   const k = document.getElementById(id);
   if (k) k.onclick = () => { Lees.open = !Lees.open; tekenLeesPaneel(); };
