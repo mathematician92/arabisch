@@ -361,7 +361,9 @@ const Wolk = {
          benaderen; wie je bent bepaalt de naam die je aantikt. */
       if (!u) return;
       const wie = localStorage.getItem(WIE);
-      if (wie) this.begin(wie); else toonInlog();
+      /* een naam die niet meer in de lijst staat (zoals het oude 'Gast'): opnieuw kiezen */
+      const mensen = window.FB_MENSEN || [];
+      if (wie && (!mensen.length || mensen.includes(wie))) this.begin(wie); else toonInlog();
     });
     this.auth.signInAnonymously().catch(() => {
       this.klaar = false;
