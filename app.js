@@ -2611,11 +2611,18 @@ const BAB = { u: ['يَفْعُلُ', 'اُفْعُلْ'], i: ['يَفْعِلُ
 /* Zwakke werkwoorden: uit de stamletters. Een werkwoord kan in meer dan één
    soort vallen (أَتَى is مهموز én ناقص). سالم = geen van alle. */
 const ZWAK = [
-  ['salim', 'سالم', 'gezond'], ['ajwaf', 'أجوف', 'zwakke middelste letter'], ['naqis', 'ناقص', 'zwakke laatste letter'],
-  ['mudaaf', 'مضعّف', 'laatste twee letters gelijk'], ['mithal', 'مثال', 'zwakke eerste letter'],
-  ['mahmuz', 'مهموز', 'met een hamza'], ['lafif_q', 'لفيف مقرون', 'middelste en laatste zwak'],
-  ['lafif_m', 'لفيف مفروق', 'eerste en laatste zwak'], ['ruba', 'رباعي', 'stam van vier letters'],
+  /* [code, naam, voorbeeld, uitleg, groep] — in de volgorde van de grammatica */
+  ['salim', 'سالم', 'كَتَبَ', 'gezond', 'sahih'],
+  ['mahmuz', 'مهموز', 'سَأَلَ', 'met een hamza', 'sahih'],
+  ['mudaaf', 'مضعّف', 'شَدَّ', 'laatste twee letters gelijk', 'sahih'],
+  ['mithal', 'مثال', 'وَصَلَ', 'zwakke eerste letter', 'mutal'],
+  ['ajwaf', 'أجوف', 'قالَ', 'zwakke middelste letter', 'mutal'],
+  ['naqis', 'ناقص', 'رَمَى', 'zwakke laatste letter', 'mutal'],
+  ['lafif_m', 'لفيف مفروق', 'وَقَى', 'eerste en laatste zwak', 'mutal'],
+  ['lafif_q', 'لفيف مقرون', 'طَوَى', 'middelste en laatste zwak', 'mutal'],
+  ['ruba', 'رباعي', 'تَرْجَمَ', 'vier stamletters', ''],
 ];
+const ZWAK_GROEP = { sahih: 'صحيح — geen zwakke letter', mutal: 'معتل — met een zwakke letter' };
 function zwakVan(e) {
   if (!e || e.cat !== 'fil') return [];
   if (e._zwak) return e._zwak;
@@ -2759,7 +2766,19 @@ function tekenIndex() {
       zw.appendChild(o);
     };
     zopt('alles', 'Alle soorten werkwoord');
-    for (const [code, ar, nl] of ZWAK) if (zwakTel[code] || wi.zwak === code) zopt(code, `${ar} — ${nl} (${zwakTel[code] || 0})`);
+    /* Arabisch eerst, dan de uitleg, dan het aantal: zo blijft de regel ook
+       op een telefoon in de goede volgorde staan */
+    const groepen = {};
+    for (const [code, ar, vb, nl, groep] of ZWAK) {
+      if (!zwakTel[code] && wi.zwak !== code) continue;
+      const o = document.createElement('option');
+      o.value = code; o.textContent = `${ar} · ${vb} — ${nl} (${zwakTel[code] || 0})`;
+      if (wi.zwak === code) o.selected = true;
+      if (groep) {
+        if (!groepen[groep]) { groepen[groep] = document.createElement('optgroup'); groepen[groep].label = ZWAK_GROEP[groep]; zw.appendChild(groepen[groep]); }
+        groepen[groep].appendChild(o);
+      } else zw.appendChild(o);
+    }
     zw.onchange = () => { wi.zwak = zw.value; teken(); };
     balk2.appendChild(zw);
   }
