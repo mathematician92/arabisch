@@ -128,6 +128,7 @@ function pak() {
     gekend: [...S.gekend], afgerond: [...S.afgerond], oefen: S.oefen, hints: S.hints,
     moeilijk: [...S.moeilijk], gelezen: [...S.gelezen], score: S.score,
     boek: S.boek, les: S.les, stap: S.stap, bijgewerkt: Date.now(), nummering: NUMMERING,
+    gewist: S.gewist || 0,      /* moment van 'Alles wissen' */
     /* Wat je in stap 1 of 6 hebt aangetikt is nog niet vastgelegd — dat
        gebeurt pas met de knop onderaan. Toch bewaren we het, met een merkje
        erbij van welke les en welke stap het was, zodat een onderbroken
@@ -147,6 +148,7 @@ function zet(r) {
   S.score = r.score || {};
   S.geklikt = new Set(r.geklikt || []);
   S.geklikBij = r.geklikVoor || '';
+  S.gewist = r.gewist || 0;
 }
 
 /* het aangetikte hoort bij één les en één stap; ergens anders is het niet geldig */
@@ -177,6 +179,12 @@ function bewaar() {
    Alleen de moeilijke lijst kun je afvinken, daar telt de nieuwste versie. */
 function samenvoeg(a, b) {
   a = omnummer(a); b = omnummer(b);
+  /* 'Alles wissen' gaat voor: wat van vóór het wissen is (een apparaat dat het
+     wissen nog niet had gezien) telt niet meer mee, anders komt alles terug */
+  const gewist = Math.max((a && a.gewist) || 0, (b && b.gewist) || 0);
+  const leeg = x => ({ boek: x.boek, les: x.les, stap: x.stap, bijgewerkt: 0, gewist, nummering: NUMMERING });
+  if (a && Object.keys(a).length && (a.gewist || 0) < gewist) a = leeg(a);
+  if (b && Object.keys(b).length && (b.gewist || 0) < gewist) b = leeg(b);
   if (!a || !Object.keys(a).length) return b || {};
   if (!b || !Object.keys(b).length) return a;
   const unie = (x, y) => [...new Set([...(x || []), ...(y || [])])];
@@ -208,6 +216,7 @@ function samenvoeg(a, b) {
     geklikt: nieuwste.geklikt || [], geklikVoor: nieuwste.geklikVoor || '',
     bijgewerkt: Math.max(a.bijgewerkt || 0, b.bijgewerkt || 0),
     nummering: NUMMERING,
+    gewist,
   };
 }
 
@@ -294,8 +303,12 @@ const Wolk = {
     const boek = S.boek, les = S.les, stap = S.stap;
     const eigen = S.geklikt.size ? [...S.geklikt] : null;
     const eigenBij = S.geklikBij;
+    const ouder = (op.gewist || 0) < (S.gewist || 0);
     zet(samenvoeg(Opslag.lees(), op));
     S.boek = boek; S.les = les; S.stap = stap;
+    /* een ander apparaat zette oude voortgang van vóór het wissen online:
+       zet de gewiste stand er meteen weer overheen */
+    if (ouder) this.plan();
     if (eigen) { S.geklikt = new Set(eigen); S.geklikBij = eigenBij; }
     else keurGeklikt();
     Opslag.schrijf(pak());
@@ -3382,6 +3395,11 @@ document.getElementById('btnWis').onclick = async () => {
   localStorage.removeItem(Opslag.sleutel());
   S.gekend = new Set(); S.afgerond = new Set(); S.moeilijk = new Set();
   S.gelezen = new Set(); S.geklikt = new Set(); S.oefen = {}; S.score = {}; S.hints = {};
+  S.ov = null; S.paren = null; S.flits = null; S.zb = null; S.vv = {};
+  /* het moment van wissen bewaren: andere apparaten met oude voortgang zien
+     zo dat die weg moet, in plaats van hem terug te zetten */
+  S.gewist = Date.now();
+  Opslag.schrijf(pak());
   /* ook online leegmaken: anders zet het samenvoegen alles zo weer terug */
   if (Wolk.klaar) { clearTimeout(Wolk.tijd); await Wolk.duw(); }
   teken();
