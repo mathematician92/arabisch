@@ -574,6 +574,10 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 }
 .les-kies{display:block;margin-left:0;max-width:none}
 .boek-kies{display:none;margin-left:0;max-width:none}
+/* filters in Mijn woorden: nooit breder dan het scherm (de langste optie
+   bepaalt anders de breedte van het menu) */
+.wi-balk select{max-width:100%;min-width:0;text-overflow:ellipsis}
+@media(max-width:600px){.wi-balk .wazn-kies{flex:1 1 100%;width:100%}}
 .oefen-kies{display:none;width:100%;margin-top:14px}
 @media(max-width:699px){
   .oefen-rij{display:none}
