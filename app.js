@@ -635,9 +635,11 @@ const REEKSEN = [
     boeken: ['qasas', 'qirat'] },
 ];
 const reeksVan = boek => REEKSEN.find(r => r.boeken.includes(boek)) || null;
-/* de kleur van de omslag van elk boek (Qaṣaṣ heeft er geen) */
+/* Bayna: de kleur van de omslag (boek 4 wordt rood, #B5372F). Qirāʾa en Qaṣaṣ
+   krijgen een kleur die op geen van die vier lijkt: paars en turkoois. */
 const BOEK_KLEUR = { bayna: '#D5893D', baynatwee: '#7C984E', baynatwee2: '#7C984E',
-                     baynadrie: '#3F6B98', baynadrie2: '#3F6B98', qirat: '#BF9B3A' };
+                     baynadrie: '#3F6B98', baynadrie2: '#3F6B98',
+                     qirat: '#7D4FA6', qasas: '#17969C' };
 const BOEK_KORT = { bayna: 'ABY B1', baynatwee: 'ABY B2D1', baynatwee2: 'ABY B2D2',
                     baynadrie: 'ABY B3D1', baynadrie2: 'ABY B3D2', qasas: 'Qaṣaṣ', qirat: 'Qirāʾa' };
 
@@ -3185,7 +3187,48 @@ function tekenIndex() {
 }
 
 /* ---------------- schermen ---------------- */
+/* ---------------- waar je precies was ----------------
+   Per apparaat (niet online): het scherm, de oefening en hoe ver je daarin
+   was (ronde, vraag, gekozen antwoord), de zin bij spreken en hoe ver je naar
+   beneden was gescrold. Bij het openen kom je daar precies terug, zolang je
+   in dezelfde les bent. */
+const PLEK = () => 'qirat.plek.' + (Opslag.gebruiker || 'los');
+const PLEK_VELDEN = ['ovModus', 'ov', 'paren', 'flits', 'zb', 'vv', 'losRonde', 'zin', 'open', 'klaar',
+                     'oefenIdx', 'vraag', 'antwoord', 'wTab'];
+let plekKlaar = false, plekTijd = null;
+function bewaarPlek() {
+  if (!plekKlaar) return;
+  clearTimeout(plekTijd);
+  const p = { boek: S.boek, les: S.les, stap: S.stap, scherm: S.scherm, reeks: S.reeks, hfd: S.hfd,
+              wi: S.wi, y: Math.round(window.scrollY) };
+  for (const v of PLEK_VELDEN) p[v] = S[v];
+  try { localStorage.setItem(PLEK(), JSON.stringify(p)); } catch (e) { /* vol of geen opslag */ }
+}
+function planPlek() {
+  if (!plekKlaar) return;
+  clearTimeout(plekTijd);
+  plekTijd = setTimeout(bewaarPlek, 500);
+}
+/* geeft de scrollpositie terug, of null als er niets te herstellen viel */
+function herstelPlek() {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem(PLEK()) || 'null'); } catch (e) { p = null; }
+  if (!p) return null;
+  if (p.wi) Object.assign(S.wi, p.wi);
+  if (['lijst', 'reeks', 'boek'].includes(p.scherm)) { S.scherm = p.scherm; S.reeks = p.reeks; S.hfd = p.hfd; }
+  if (p.boek !== S.boek || p.les !== S.les) return S.scherm !== 'les' ? p.y || 0 : null;
+  if (typeof p.stap === 'number' && p.stap >= 0 && p.stap <= 5) S.stap = p.stap;
+  for (const v of PLEK_VELDEN) if (p[v] !== undefined && p[v] !== null) S[v] = p[v];
+  if (!S.vv) S.vv = {};
+  if (!S.oefenIdx) S.oefenIdx = {};
+  return p.y || 0;
+}
+addEventListener('scroll', planPlek, { passive: true });
+addEventListener('pagehide', bewaarPlek);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') bewaarPlek(); });
+
 function teken() {
+  planPlek();
   Lees.lijst = [];
   queueMicrotask(tekenLeesPaneel);
   tekenKop();
@@ -3447,9 +3490,19 @@ document.getElementById('main').addEventListener('click', sluitMenus);
     S.les = start;
     /* op dezelfde stap terugkomen waar je was */
     if (typeof r.stap === 'number' && r.stap >= 0 && r.stap <= 5) S.stap = r.stap;
+    /* en precies waar je was: oefening, vraag, scrollpositie */
+    const y = herstelPlek();
     keurGeklikt();
     pasWeergaveToe();
     teken();
+    if (y) {
+      /* de pagina is pas helemaal hoog als de lettertypes er zijn */
+      const zet = () => { if (window.scrollY < y - 20) window.scrollTo(0, y); };
+      requestAnimationFrame(zet);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(zet);
+      setTimeout(zet, 500);
+    }
+    plekKlaar = true;
     /* pas nu de wolk: de app staat er al, ingelogd of niet */
     if (!Wolk.start()) Wolk.staat('fout', 'niet gekoppeld — alleen dit apparaat');
   } catch (e) {
