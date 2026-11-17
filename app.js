@@ -1407,14 +1407,11 @@ function tekenLeesPaneel() {
   };
   balk.appendChild(tk);
 
-  if (!Stem.stem) {
-    const reden = Stem.lijst.length
-      ? 'Geen Arabische stem op dit toestel'
-      : 'De stemmen zijn nog niet geladen — ververs de pagina';
-    balk.querySelectorAll('button, select').forEach(b => { b.disabled = true; b.title = reden; });
-    pan.appendChild(balk);
-    pan.appendChild(el('span', 'lees-reden', reden));
-  } else pan.appendChild(balk);
+  /* Geen Arabische stem in de lijst is geen reden om de knoppen uit te zetten:
+     veel telefoons noemen hun Arabische stem niet (of pas later), maar spreken
+     het wel uit als de tekst als Arabisch is gemarkeerd. Losse woorden en de
+     stap Spreken deden dat al; het voorlezen van de hele tekst nu ook. */
+  pan.appendChild(balk);
   meetKop();
 }
 const Stem = {
@@ -1498,6 +1495,10 @@ const Stem = {
      pause/resume houdt het aan de praat. */
   wakker() {
     clearInterval(this.klok);
+    /* Alleen op de computer: op een telefoon (Android) zet pause() het
+       voorlezen helemaal stil in plaats van het wakker te houden. */
+    const ua = navigator.userAgent || '';
+    if (!/Chrome\//.test(ua) || /Android|Mobile|iPhone|iPad/.test(ua)) return;
     this.klok = setInterval(() => {
       if (!this.bezig) { clearInterval(this.klok); return; }
       try { speechSynthesis.pause(); speechSynthesis.resume(); } catch (e) { /* niet erg */ }
