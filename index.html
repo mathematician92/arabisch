@@ -79,6 +79,8 @@ header{
   border-bottom:1px solid var(--line);
   padding:env(safe-area-inset-top) 0 0;
 }
+/* dun randje in de kleur van het boek dat je leest */
+header::before{content:'';position:absolute;left:0;right:0;top:env(safe-area-inset-top);height:4px;background:var(--boek,transparent);pointer-events:none}
 .hwrap{max-width:900px;margin:0 auto;padding:9px clamp(12px,3.5vw,18px) 0;
   display:flex;align-items:center;gap:clamp(6px,2vw,12px);flex-wrap:wrap}
 /* Alle bediening op één regel: boek, les, wie je bent, Mijn woorden en de
@@ -486,7 +488,7 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 .vraag-tekst.ar{font-family:'Scheherazade New',serif;font-size:42px;direction:rtl;
   text-align:right;line-height:1.5}
 .opties{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-@media(max-width:560px){.opties{grid-template-columns:1fr}}
+@media(max-width:560px){.opties{grid-template-columns:1fr}.opties.twee{grid-template-columns:1fr 1fr}}
 .optie{padding:12px 14px;min-height:48px;border:1px solid var(--line);border-radius:var(--r);
   background:var(--card);text-align:left;font-size:14.5px;line-height:1.35;
   transition:border-color .12s,background .12s}
@@ -497,7 +499,24 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 .optie[disabled]{cursor:default}
 .uitleg{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:14px}
 /* ---------- overhoren: rondes en extra oefeningen ---------- */
-.ov-modi{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 4px}
+.ov-modi{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 4px}
+/* Volgende: op de computer gewoon in de rij knoppen, op de telefoon vast onderaan */
+.vast-balk{display:contents}
+@media (max-width:600px){
+  .ov-modi{display:flex;flex-wrap:wrap;gap:6px}
+  .ov-modi .ov-modus{flex:1 1 auto}
+  .ov-modi .ov-modus{padding:6px 8px;font-size:12.5px;text-align:center;white-space:nowrap;border-radius:8px;
+    min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .vast-balk{display:block;position:fixed;left:0;right:0;bottom:0;z-index:30;
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+    background:var(--card);border-top:1px solid var(--line);box-shadow:0 -4px 14px rgba(0,0,0,.06)}
+  .vast-balk .knop{width:100%;margin:0}
+  .blad:has(.vast-balk){padding-bottom:96px}
+}
+@media (max-width:359px){
+  .ov-modi{gap:4px}
+  .ov-modi .ov-modus{padding:5px 4px;font-size:11.5px}
+}
 .ov-modus{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;padding:5px 12px;border:1px solid var(--line);
   border-radius:99px;color:var(--ink-2);background:var(--card)}
 .ov-modus.aan{background:var(--ink);border-color:var(--ink);color:var(--card)}
@@ -628,6 +647,16 @@ dialog::backdrop{background:rgba(23,25,15,.4)}
 .ov-sprong{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 4px}
 .ov-sprong-knop{font-size:12.5px;border:1px solid var(--line);border-radius:99px;padding:4px 12px;background:var(--card);color:var(--ink)}
 .ov-sprong-knop:hover{border-color:var(--rubric);color:var(--rubric)}
+/* elk boek in zijn eigen kleur (de omslag van het boek) */
+.ov-sectie{margin-top:26px}
+.ov-sectie.gekleurd{margin:26px calc(-1 * clamp(8px,2vw,14px)) 0;padding:4px clamp(8px,2vw,14px) 18px;border-radius:12px;
+  background:color-mix(in srgb, var(--bk) 13%, var(--card));border-top:5px solid var(--bk)}
+.ov-sectie.gekleurd .ov-boek{border-top:0;margin-top:10px;padding-top:6px;color:color-mix(in srgb, var(--bk) 72%, var(--ink))}
+.ov-sectie.gekleurd .balk i{background:var(--bk)}
+.ov-sectie.gekleurd .ov-les:not(.af):not(.gel){background:var(--card)}
+.ov-sprong-knop.gekleurd{border-color:var(--bk);background:color-mix(in srgb, var(--bk) 16%, var(--card))}
+body.donker .ov-sectie.gekleurd{background:color-mix(in srgb, var(--bk) 20%, var(--card))}
+body.donker .ov-sectie.gekleurd .ov-boek{color:color-mix(in srgb, var(--bk) 55%, white)}
 .les-kies option.kop{font-weight:700}
 .info.elders{background:var(--carry);color:var(--card);border-color:var(--carry)}
 .gezien{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0 2px}
@@ -940,7 +969,6 @@ button.pil-ev{cursor:pointer;border-color:var(--carry)}
 </div>
 
 <footer class="voet">
-  <button id="btnExport">Voortgang opslaan als bestand</button>
   <span class="wolk-staat" id="wolkStaat" hidden><i></i><span></span></span>
   <button id="btnWis">Alles wissen</button>
 </footer>
