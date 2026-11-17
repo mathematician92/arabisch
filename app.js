@@ -32,7 +32,7 @@ const S = {
   klaar: false,    // hele zin zichtbaar
   lades: {},       // welke laden openstaan (niet bewaard: standaard dicht)
   scherm: 'les',   // 'les' of 'lijst' — Mijn woorden staat naast de lessen
-  wi: { bereik: 'gekend', boek: 'alles', op: 'woord', zoek: '' },
+  wi: { bereik: 'gekend', boek: 'alles', op: 'woord', zoek: '', soort: 'alles', wazn: 'alles' },
 };
 
 /* De nummers in S.stap zijn vast (0..5, ook in de bewaarde voortgang); de
@@ -1037,7 +1037,7 @@ function tekenLijst(titel, sub, metActies) {
   };
   tab('nieuw', 'Nieuw', `<span class="wt-n" title="nieuwe woorden">${tel(nieuw)}</span>`);
   tab('herh', 'Herhaling',
-    `<span class="wt-n o" title="eerder gezien, nog niet gekend">${nOranje}</span>` +
+    `<span class="wt-n o" title="eerder gezien, nog niet bekend">${nOranje}</span>` +
     `<span class="wt-n g" title="bekend">${nGroen}</span>`);
   blad.appendChild(tabs);
 
@@ -1534,6 +1534,63 @@ function luidspreker(tekst, klasse) {
 
 /* ---------------- detailpaneel ---------------- */
 let vorigActief = null;
+/* ---------------- werkwoorden bij een naamwoord ----------------
+   Per stam de werkwoorden uit de bank, en per afgeleide vorm (masdar,
+   ism fāʿil, ism mafʿūl) het werkwoord waar hij bij hoort. Zo vindt het
+   woordvenster ook werkwoorden die in de bouw niet met de hand gekoppeld
+   zijn. */
+let WW_INDEX = null;
+const AFL_N = s => (s || '').normalize('NFC').replace(/ـ/g, '').trim()
+  .replace(/[ً-ٍ]$/, '').replace(/[َ-ِ]$/, '');
+const STAM_N = r => (r || '').replace(/[أإآؤئ]/g, 'ء');
+function wwIndex() {
+  if (WW_INDEX) return WW_INDEX;
+  const opStam = new Map(), opVorm = new Map();
+  for (const [id, e] of Object.entries(S.lemmas)) {
+    if (e.cat !== 'fil' || !e.root) continue;
+    const r = STAM_N(e.root);
+    if (!opStam.has(r)) opStam.set(r, []);
+    opStam.get(r).push(id);
+    for (const [veld, naam] of [['masdar', 'masdar'], ['faail', 'ism fāʿil'], ['mafool', 'ism mafʿūl']]) {
+      for (const v of String(e[veld] || '').split(/[،,/]/)) {
+        const k = AFL_N(v);
+        if (!k) continue;
+        if (!opVorm.has(k)) opVorm.set(k, []);
+        opVorm.get(k).push({ id, naam });
+      }
+    }
+  }
+  WW_INDEX = { opStam, opVorm };
+  return WW_INDEX;
+}
+/* {van: {id, naam} | null, stam: [ids]} voor een naamwoord */
+function werkwoordenBij(e) {
+  const { opStam, opVorm } = wwIndex();
+  const r = STAM_N(e.root);
+  let van = null;
+  if (e.van) {
+    const id = Object.keys(S.lemmas).find(i => S.lemmas[i].cat === 'fil' && S.lemmas[i].lemma === e.van.lemma);
+    van = { id, naam: '', los: e.van };
+  } else {
+    const k = (opVorm.get(AFL_N(e.lemma)) || []).find(x => STAM_N(lem(x.id).root) === r);
+    if (k) van = k;
+  }
+  let stam = (opStam.get(r) || []).filter(id => !van || id !== van.id);
+  /* het met de hand gekoppelde 'verwante' werkwoord vooraan */
+  if (e.verwant) {
+    const vid = stam.find(id => lem(id).lemma === e.verwant.lemma);
+    if (vid) stam = [vid, ...stam.filter(x => x !== vid)];
+  }
+  return { van, stam };
+}
+function wwRegel(v, id) {
+  const r = el(id ? 'button' : 'div', 'ww-regel');
+  r.innerHTML = `<span class="ar">${esc(v.madi || v.lemma)}</span><span class="ar zacht">${esc(v.mudari || '')}</span>` +
+    `<span class="bet">${esc(v.nl || '')}</span>`;
+  if (id) r.onclick = () => toonWoord([id], null, null, null, null);
+  return r;
+}
+
 function toonWoord(ids, zin, wi, zinEl, wEl) {
   const p = document.getElementById('paneelInhoud');
   p.innerHTML = '';
@@ -1583,7 +1640,21 @@ function toonWoord(ids, zin, wi, zinEl, wEl) {
     if (e.root) meta.appendChild(el('span', 'pil', 'stamletters <span class="ar">' + esc(e.root.split('').join(' ')) + '</span>'));
     if (e.soort) meta.appendChild(el('span', 'pil', '<span class="ar">' + esc(e.soort) + '</span>'));
     if (e.mv) meta.appendChild(el('span', 'pil', 'meervoud <span class="ar">' + esc(e.mv) + '</span>'));
+    if (e.ev) {
+      const p2 = el(e.ev.id ? 'button' : 'span', 'pil pil-ev', 'enkelvoud <span class="ar">' + esc(e.ev.lemma) + '</span>');
+      if (e.ev.id) p2.onclick = () => toonWoord([e.ev.id], null, null, null, null);
+      meta.appendChild(p2);
+    }
     if (meta.children.length) d.appendChild(meta);
+    /* staat het woord in de tekst in het meervoud? dan zeggen we dat erbij */
+    if (zin && wi != null && e.mv && zin.woorden[wi]) {
+      const kaalT = s => (s || '').replace(/[\u064B-\u0652\u0670\u0640]/g, '').replace(/^ال/, '');
+      const vorm = kaalT(zin.woorden[wi].w).replace(/^(و|ف|ب|ل|ك)?(ال|لل)?/, '');
+      const mvs = e.mv.split(/[،,/]/).map(m => kaalT(m.trim())).filter(Boolean);
+      if (mvs.some(m => vorm.startsWith(m.replace(/[ةٌ]$/, '')) && kaalT(e.lemma) !== m)) {
+        d.appendChild(el('div', 'hier-mv', `In de tekst staat het meervoud <span class="ar">${esc(zin.woorden[wi].w)}</span>; het enkelvoud is <span class="ar">${esc(e.lemma)}</span>.`));
+      }
+    }
 
     if (e.cat === 'fil') {
       const dl = el('dl');
@@ -1607,18 +1678,21 @@ function toonWoord(ids, zin, wi, zinEl, wEl) {
       d.appendChild(knop); d.appendChild(tabelWrap);
     }
 
-    const bron = e.van || e.verwant;
-    if (bron) {
-      const v = el('div');
-      v.style.cssText = 'margin-top:12px;padding:10px 12px;background:var(--paper);border-radius:3px';
-      const kop = e.van ? 'Afgeleid van het werkwoord' : 'Werkwoord met dezelfde stamletters';
-      const noot = e.van ? '' :
-        '<div class="verwant-noot">Dit woord is niet uit dit werkwoord gevormd; ze delen alleen de wortel.</div>';
-      v.innerHTML = `<div class="kop" style="color:var(--carry)">${kop}</div>
-        <div class="rij"><dt>verleden tijd</dt><dd>${esc(bron.madi)}</dd></div>
-        <div class="rij"><dt>tegenwoordige tijd</dt><dd>${esc(bron.mudari)}</dd></div>
-        <div class="bet" style="margin-top:5px">${esc(bron.nl)}</div>` + noot;
-      d.appendChild(v);
+    if (e.cat === 'ism' && e.root && !e.functie) {
+      const { van, stam } = werkwoordenBij(e);
+      if (van || stam.length) {
+        const v = el('div', 'ww-blok');
+        if (van) {
+          v.appendChild(el('div', 'kop', 'Afgeleid van het werkwoord' + (van.naam ? ` <span class="klein">(dit is de ${van.naam})</span>` : '')));
+          v.appendChild(van.id ? wwRegel(lem(van.id), van.id) : wwRegel(van.los, null));
+        }
+        if (stam.length) {
+          v.appendChild(el('div', 'kop' + (van ? ' tweede' : ''), (van ? 'Andere werkwoorden' : 'Werkwoorden') + ' met dezelfde stamletters'));
+          for (const id of stam.slice(0, 5)) v.appendChild(wwRegel(lem(id), id));
+          if (stam.length > 5) v.appendChild(el('div', 'klein', `en nog ${stam.length - 5}`));
+        }
+        d.appendChild(v);
+      }
     }
 
     if (e.root && S.woordenboek[e.root]) {
@@ -2084,24 +2158,71 @@ function tekenOverhoren(blad) {
   blad.appendChild(a);
 }
 
-/* ---------------- paren ---------------- */
+/* ---------------- extra oefeningen ----------------
+   Paren en Flitskaarten gebruiken de tien woorden van je huidige
+   Overhoren-ronde: zo oefen je dezelfde woorden op een andere manier.
+   Werkwoordvormen en Stamletters lopen in eigen rondes van tien door alle
+   werkwoorden (of woorden met een stam) van de les. Overal: stippen
+   bovenaan, fout komt terug in dezelfde ronde, en een einde. */
+function rondeWoorden() {
+  if (!S.ov || S.ov.sleutel !== lesSleutel()) {
+    if (ovhPool().length) nieuweRonde();
+  }
+  if (S.ov && S.ov.sleutel === lesSleutel() && S.ov.woorden.length) return { ids: S.ov.woorden, sleutel: lesSleutel() + '#' + S.ov.nr };
+  /* alles al bekend: tien willekeurige woorden van de les */
+  if (!S.losRonde || S.losRonde.sleutel !== lesSleutel()) S.losRonde = { sleutel: lesSleutel(), ids: meng(lesWoorden()).slice(0, RONDE) };
+  return { ids: S.losRonde.ids, sleutel: lesSleutel() + '#los' };
+}
+function stippenRij(woorden, uitslag, nogOpen, label, rechts) {
+  const kop = el('div', 'ronde-kop');
+  if (label) kop.appendChild(el('span', 'ronde-nr', label));
+  const stip = el('span', 'stippen');
+  for (const id of woorden) {
+    const u = uitslag[id], klaar = !nogOpen.includes(id);
+    stip.appendChild(el('i', klaar ? (u === 'goed' ? 'g' : 'o') : (u === 'mis' ? 'r' : '')));
+  }
+  kop.appendChild(stip);
+  if (rechts) kop.appendChild(el('span', 'ronde-rest', rechts));
+  return kop;
+}
+
+/* ---- paren: twee sets van vijf ---- */
 function tekenParen(blad) {
-  const sk = lesSleutel();
-  if (!S.paren || S.paren.sleutel !== sk || S.paren.nieuw) {
-    const alle = lesWoorden();
-    const voorkeur = [...meng(alle.filter(i => !S.gekend.has(i))), ...meng(alle.filter(i => S.gekend.has(i)))];
-    const set = [], nls = new Set();
-    for (const id of voorkeur) {
-      const nl = lem(id).nl;
-      if (nls.has(nl)) continue;
-      nls.add(nl); set.push(id);
-      if (set.length === 5) break;
+  const rw = rondeWoorden();
+  if (!S.paren || S.paren.sleutel !== rw.sleutel || S.paren.opnieuw) {
+    /* geen twee keer dezelfde betekenis in één set */
+    const ids = meng(rw.ids), sets = [[], []];
+    for (const id of ids) {
+      const s = sets.find(x => x.length < 5 && !x.some(y => lem(y).nl === lem(id).nl));
+      if (s) s.push(id);
     }
-    S.paren = { sleutel: sk, set, ar: meng(set), nl: meng(set), keus: {}, klaar: [], mis: null, fouten: 0 };
+    S.paren = { sleutel: rw.sleutel, sets: sets.filter(s => s.length >= 2), i: 0, keus: {}, klaar: [], mis: null, fouten: 0 };
+    S.paren.ar = meng(S.paren.sets[0] || []); S.paren.nl = meng(S.paren.sets[0] || []);
   }
   const P = S.paren;
-  if (P.set.length < 2) { blad.appendChild(el('p', 'sub', 'Te weinig woorden in deze les voor paren.')); return; }
-  blad.appendChild(el('p', 'sub ov-uitleg', 'Tik een Arabisch woord en de betekenis die erbij hoort.'));
+  if (!P.sets.length) { blad.appendChild(el('p', 'sub', 'Te weinig woorden in deze les voor paren.')); return; }
+  blad.appendChild(el('p', 'sub ov-uitleg', 'De woorden van je Overhoren-ronde. Tik een betekenis en het Arabische woord dat erbij hoort.'));
+  const set = P.sets[P.i] || [];
+  const alleKlaar = P.i >= P.sets.length;
+  const kop = el('div', 'ronde-kop');
+  kop.appendChild(el('span', 'ronde-nr', alleKlaar ? 'Klaar' : `Set ${P.i + 1} van ${P.sets.length}`));
+  const st = el('span', 'stippen');
+  P.sets.forEach((s, k) => s.forEach(id => st.appendChild(el('i', k < P.i || P.klaar.includes(id) ? 'g' : ''))));
+  kop.appendChild(st);
+  blad.appendChild(kop);
+  if (alleKlaar) {
+    const k = el('div', 'vraagkaart ronde-klaar');
+    k.appendChild(el('div', 'vraag-kop', 'Paren klaar'));
+    k.appendChild(el('p', null, P.fouten ? `Alle ${P.sets.flat().length} woorden gekoppeld, met <b>${P.fouten}</b> ${P.fouten === 1 ? 'misser' : 'missers'}.` : `Alle ${P.sets.flat().length} woorden gekoppeld, zonder fouten!`));
+    blad.appendChild(k);
+    const a = el('div', 'acties');
+    const n = el('button', 'knop', 'Naar Overhoren');
+    n.onclick = () => { S.ovModus = 'ovh'; teken(); window.scrollTo(0, 0); };
+    const o = el('button', 'knop zacht', 'Nog een keer');
+    o.onclick = () => { P.opnieuw = true; teken(); };
+    a.appendChild(n); a.appendChild(o); blad.appendChild(a);
+    return;
+  }
   const vak = el('div', 'paren');
   const kolom = (kant, lijst) => {
     const c = el('div', 'paren-kol ' + kant);
@@ -2115,8 +2236,18 @@ function tekenParen(blad) {
         P.keus[kant] = P.keus[kant] === id ? null : id;
         P.mis = null;
         if (P.keus.ar && P.keus.nl) {
-          if (P.keus.ar === P.keus.nl) P.klaar.push(P.keus.ar);
-          else {
+          if (P.keus.ar === P.keus.nl) {
+            P.klaar.push(P.keus.ar);
+            if (set.every(x => P.klaar.includes(x))) {
+              /* set af: even laten zien, dan de volgende */
+              setTimeout(() => {
+                if (S.paren !== P) return;
+                P.i++;
+                if (P.sets[P.i]) { P.ar = meng(P.sets[P.i]); P.nl = meng(P.sets[P.i]); }
+                teken();
+              }, 600);
+            }
+          } else {
             P.fouten++;
             P.mis = { ar: P.keus.ar, nl: P.keus.nl };
             setTimeout(() => { if (S.paren === P) { P.mis = null; teken(); } }, 700);
@@ -2133,37 +2264,32 @@ function tekenParen(blad) {
   vak.appendChild(kolom('nl', P.nl));
   vak.appendChild(kolom('ar', P.ar));
   blad.appendChild(vak);
-  if (P.klaar.length === P.set.length) {
-    blad.appendChild(el('p', 'ov-klaar', P.fouten ? `Klaar, met ${P.fouten} ${P.fouten === 1 ? 'misser' : 'missers'}.` : 'Klaar, zonder fouten!'));
-  }
-  const a = el('div', 'acties');
-  const n = el('button', 'knop' + (P.klaar.length === P.set.length ? '' : ' zacht'), 'Nieuwe set');
-  n.onclick = () => { P.nieuw = true; teken(); };
-  a.appendChild(n);
-  blad.appendChild(a);
 }
 
-/* ---------------- flitskaarten ---------------- */
+/* ---- flitskaarten: de tien woorden van de ronde ---- */
 function tekenFlits(blad) {
-  const sk = lesSleutel();
-  if (!S.flits || S.flits.sleutel !== sk || S.flits.opnieuw) {
-    const alle = lesWoorden();
-    const open = alle.filter(i => !S.gekend.has(i));
-    const stapel = meng(open.length ? open : alle);
-    S.flits = { sleutel: sk, stapel, totaal: stapel.length, om: false, wist: 0, niet: 0 };
+  const rw = rondeWoorden();
+  if (!S.flits || S.flits.sleutel !== rw.sleutel || S.flits.opnieuw) {
+    S.flits = { sleutel: rw.sleutel, woorden: rw.ids.slice(), stapel: meng(rw.ids), uitslag: {}, om: false };
   }
   const F = S.flits;
-  blad.appendChild(el('p', 'sub ov-uitleg', 'Bedenk de betekenis, draai de kaart om en zeg eerlijk of je het wist. Wat je niet wist, komt terug.'));
+  blad.appendChild(el('p', 'sub ov-uitleg', 'De woorden van je Overhoren-ronde. Bedenk de betekenis, draai de kaart om en zeg eerlijk of je het wist. Wat je niet wist, komt terug.'));
+  blad.appendChild(stippenRij(F.woorden, F.uitslag, F.stapel, F.stapel.length ? `nog ${F.stapel.length}` : 'Klaar'));
   if (!F.stapel.length) {
-    blad.appendChild(el('p', 'ov-klaar', `Stapel doorlopen: ${F.wist} keer geweten, ${F.niet} keer niet.`));
+    const wist = F.woorden.filter(i => F.uitslag[i] === 'goed').length;
+    const k = el('div', 'vraagkaart ronde-klaar');
+    k.appendChild(el('div', 'vraag-kop', 'Flitskaarten klaar'));
+    k.appendChild(el('p', null, `<b>${wist}</b> meteen geweten, <b>${F.woorden.length - wist}</b> na herhaling.`));
+    blad.appendChild(k);
     const a = el('div', 'acties');
-    const n = el('button', 'knop', 'Opnieuw');
-    n.onclick = () => { F.opnieuw = true; teken(); };
-    a.appendChild(n); blad.appendChild(a);
+    const n = el('button', 'knop', 'Naar Overhoren');
+    n.onclick = () => { S.ovModus = 'ovh'; teken(); window.scrollTo(0, 0); };
+    const o = el('button', 'knop zacht', 'Nog een keer');
+    o.onclick = () => { F.opnieuw = true; teken(); };
+    a.appendChild(n); a.appendChild(o); blad.appendChild(a);
     return;
   }
   const id = F.stapel[0], e = lem(id);
-  blad.appendChild(el('div', 'balk-tekst', `nog ${F.stapel.length} van ${F.totaal}`));
   const kaart = el('button', 'flitskaart' + (F.om ? ' om' : ''));
   kaart.innerHTML = `<div class="fk-woord ar">${esc(e.lemma)}</div>` + (F.om
     ? `<div class="fk-bet">${esc(e.nl)}</div>` + (e.root ? `<div class="klein">stam <span class="ar">${esc(e.root.split('').join(' '))}</span></div>` : '')
@@ -2173,11 +2299,11 @@ function tekenFlits(blad) {
   const a = el('div', 'acties');
   if (F.om) {
     const ja = el('button', 'knop', 'Wist ik');
-    ja.onclick = () => { F.wist++; F.stapel.shift(); F.om = false; teken(); };
+    ja.onclick = () => { if (!F.uitslag[id]) F.uitslag[id] = 'goed'; else if (F.uitslag[id] === 'mis') F.uitslag[id] = 'herhaald'; F.stapel.shift(); F.om = false; teken(); };
     const nee = el('button', 'knop zacht', 'Wist ik niet');
     nee.onclick = () => {
-      F.niet++; F.stapel.shift();
-      F.stapel.splice(Math.min(F.stapel.length, 3), 0, id); F.om = false; teken();
+      F.uitslag[id] = 'mis'; F.stapel.shift();
+      F.stapel.splice(Math.min(F.stapel.length, 2 + Math.floor(Math.random() * 2)), 0, id); F.om = false; teken();
     };
     a.appendChild(ja); a.appendChild(nee);
   } else {
@@ -2196,10 +2322,10 @@ const VORMEN = [
   ['mudari', 'المُضارِع'], ['amr', 'الأَمْر'], ['masdar', 'المَصْدَر'],
   ['faail', 'اسم الفاعِل'], ['mafool', 'اسم المَفْعول'],
 ];
-function wwVraag() {
-  const ww = lesWoorden().filter(i => lem(i).cat === 'fil' && (lem(i).mudari || lem(i).masdar));
-  if (!ww.length) return null;
-  const id = ww[Math.floor(Math.random() * ww.length)], e = lem(id);
+const wwWoorden = () => lesWoorden().filter(i => lem(i).cat === 'fil' && (lem(i).mudari || lem(i).masdar));
+const stamWoorden = () => lesWoorden().filter(i => lem(i).cat !== 'harf' && lem(i).root && lem(i).root.length >= 3);
+function wwVraag(id) {
+  const e = lem(id);
   /* soms een vervoeging: andere personen van hetzelfde werkwoord zijn de foute keuzes */
   if (e.tabel && Math.random() < 0.4) {
     const tijd = meng(['الماضي', 'المضارع'])[0];
@@ -2207,72 +2333,128 @@ function wwVraag() {
     const pers = meng(['أنا', 'أنت', 'أنتِ', 'هو', 'هي', 'نحن', 'أنتم', 'هم'].filter(p => rij[p]))[0];
     if (pers) {
       const goed = rij[pers];
-      const anders = [...new Set(Object.values(rij).filter(x => x && x !== goed))];
-      const uit = meng(anders).slice(0, 3);
+      const uit = meng([...new Set(Object.values(rij).filter(x => x && x !== goed))]).slice(0, 3);
       if (uit.length === 3) return { id, e, kop: `Vervoeg — ${tijd === 'الماضي' ? 'الماضي (verleden tijd)' : 'المضارع (tegenwoordige tijd)'}`,
         tekst: `${e.lemma}  ·  ${pers}`, sub: PERS_NL[pers] || '', goed, opties: meng([goed, ...uit]) };
     }
   }
-  const soorten = VORMEN.filter(([v]) => e[v]);
-  const [veld, naam] = soorten[Math.floor(Math.random() * soorten.length)];
-  const goed = e[veld];
-  const uit = afleiders(id, a => a[veld], 3);
-  if (uit.length < 3) return null;
-  return { id, e, kop: 'Wat is ' + naam + '?', tekst: e.lemma, sub: e.nl, goed, opties: meng([goed, ...uit]) };
+  for (const [veld, naam] of meng(VORMEN.filter(([v]) => e[v]))) {
+    const goed = e[veld];
+    const uit = afleiders(id, a => a[veld], 3);
+    if (uit.length === 3) return { id, e, kop: 'Wat is ' + naam + '?', tekst: e.lemma, sub: e.nl, goed, opties: meng([goed, ...uit]) };
+  }
+  return null;
 }
 let STAMMEN = null;
-function stamVraag() {
-  const ww = lesWoorden().filter(i => lem(i).cat !== 'harf' && lem(i).root && lem(i).root.length >= 3);
-  if (!ww.length) return null;
-  const id = ww[Math.floor(Math.random() * ww.length)], e = lem(id);
+function stamVraag(id) {
+  const e = lem(id);
   if (!STAMMEN) STAMMEN = [...new Set(Object.values(S.lemmas).map(x => x.root).filter(r => r && r.length >= 3))];
   const goed = e.root;
   const lijkt = r => { let n = 0; for (let i = 0; i < Math.min(r.length, goed.length); i++) if (r[i] === goed[i]) n++; return n; };
-  const dicht = meng(STAMMEN.filter(r => r !== goed && r.length === goed.length && lijkt(r) >= 2));
-  const uit = [...dicht.slice(0, 3)];
+  const uit = meng(STAMMEN.filter(r => r !== goed && r.length === goed.length && lijkt(r) >= 2)).slice(0, 3);
   for (const r of meng(STAMMEN)) { if (uit.length >= 3) break; if (r !== goed && !uit.includes(r)) uit.push(r); }
   const sp = r => r.split('').join(' ');
   return { id, e, kop: 'Wat zijn de stamletters?', tekst: e.lemma, sub: e.nl, goed: sp(goed),
            opties: meng([sp(goed), ...uit.map(sp)]) };
 }
 function tekenVormVraag(blad, soort) {
-  const sk = lesSleutel() + soort;
-  if (!S.vv || S.vv.sleutel !== sk || S.vv.volgende) {
-    S.vv = { sleutel: sk, vraag: soort === 'ww' ? wwVraag() : stamVraag(), antwoord: null,
-             goed: S.vv && S.vv.sleutel === sk ? S.vv.goed : 0, gesteld: S.vv && S.vv.sleutel === sk ? S.vv.gesteld : 0 };
+  const sk = lesSleutel() + '~' + soort;
+  if (!S.vv) S.vv = {};
+  let R = S.vv[soort];
+  const maakVraag = id => soort === 'ww' ? wwVraag(id) : stamVraag(id);
+  const startRonde = () => {
+    R.nr++;
+    R.woorden = R.volgorde.slice((R.nr - 1) * RONDE, R.nr * RONDE);
+    R.rij = meng(R.woorden); R.uitslag = {}; R.antwoord = null;
+    R.vraag = R.rij.length ? maakVraag(R.rij[0]) : null;
+  };
+  if (!R || R.sleutel !== sk) {
+    const alle = meng(soort === 'ww' ? wwWoorden() : stamWoorden()).filter(id => maakVraag(id));
+    R = S.vv[soort] = { sleutel: sk, volgorde: alle, nr: 0 };
+    startRonde();
   }
-  const V = S.vv, v = V.vraag;
-  if (!v) {
+  const totaal = Math.ceil(R.volgorde.length / RONDE);
+  const naam = soort === 'ww' ? 'werkwoorden' : 'woorden met een stam';
+  if (!R.volgorde.length) {
     blad.appendChild(el('p', 'sub', soort === 'ww' ? 'In deze les staan geen werkwoorden om te oefenen.' : 'In deze les staan geen woorden met stamletters.'));
     return;
   }
-  if (V.gesteld) blad.appendChild(el('div', 'balk-tekst', `${V.goed} van ${V.gesteld} goed`));
+  blad.appendChild(el('p', 'sub ov-uitleg', `Alle ${R.volgorde.length} ${naam} van deze les, in rondes van ${RONDE}.`));
+  blad.appendChild(stippenRij(R.woorden, R.uitslag, R.rij, `Ronde ${R.nr} van ${totaal}`));
+
+  /* ronde klaar */
+  if (!R.vraag) {
+    const goed = R.woorden.filter(i => R.uitslag[i] === 'goed').length;
+    const laatste = R.nr >= totaal;
+    const k = el('div', 'vraagkaart ronde-klaar');
+    k.appendChild(el('div', 'vraag-kop', laatste ? `Klaar — alle ${naam} gehad` : `Ronde ${R.nr} klaar`));
+    k.appendChild(el('p', null, `<b>${goed}</b> meteen goed, <b>${R.woorden.length - goed}</b> na herhaling.` +
+      (laatste ? '' : ` Nog ${totaal - R.nr} ${totaal - R.nr === 1 ? 'ronde' : 'rondes'}.`)));
+    blad.appendChild(k);
+    const a = el('div', 'acties');
+    if (!laatste) {
+      const n = el('button', 'knop', 'Volgende ronde');
+      n.onclick = () => { startRonde(); teken(); window.scrollTo(0, 0); };
+      a.appendChild(n);
+    } else {
+      const o = el('button', 'knop', 'Opnieuw van voren');
+      o.onclick = () => { S.vv[soort] = null; teken(); window.scrollTo(0, 0); };
+      a.appendChild(o);
+    }
+    const t = el('button', 'knop zacht', 'Naar Overhoren');
+    t.onclick = () => { S.ovModus = 'ovh'; teken(); window.scrollTo(0, 0); };
+    a.appendChild(t);
+    blad.appendChild(a);
+    return;
+  }
+
+  const v = R.vraag;
   const kaart = el('div', 'vraagkaart');
   kaart.appendChild(el('div', 'vraag-kop', v.kop));
   kaart.appendChild(el('div', 'vraag-tekst ar', esc(v.tekst)));
   if (v.sub) kaart.appendChild(el('div', 'vraag-sub', esc(v.sub)));
   const opts = el('div', 'opties');
+  const antwoord = o => {
+    R.antwoord = o;
+    if (o === v.goed) { if (!R.uitslag[v.id]) R.uitslag[v.id] = 'goed'; else if (R.uitslag[v.id] === 'mis') R.uitslag[v.id] = 'herhaald'; }
+    else R.uitslag[v.id] = 'mis';
+    teken();
+  };
   for (const o of v.opties) {
     const b = el('button', 'optie ar', esc(o));
-    if (V.antwoord != null) {
-      if (o === v.goed) b.classList.add('goed'); else if (o === V.antwoord) b.classList.add('mis');
+    if (R.antwoord != null) {
+      if (o === v.goed) b.classList.add('goed'); else if (o === R.antwoord) b.classList.add('mis');
       b.disabled = true;
     }
-    b.onclick = () => { V.antwoord = o; V.gesteld++; if (o === v.goed) V.goed++; teken(); };
+    b.onclick = () => antwoord(o);
     opts.appendChild(b);
   }
   kaart.appendChild(opts);
-  if (V.antwoord != null && soort === 'ww') {
+  if (R.antwoord == null) {
+    const wn = el('button', 'weet-niet', 'Weet ik niet');
+    wn.onclick = () => antwoord(WEET_NIET);
+    kaart.appendChild(wn);
+  } else {
     const e = v.e;
-    const regels = [['الماضي', e.madi || e.lemma], ['المضارع', e.mudari], ['الأمر', e.amr], ['المصدر', e.masdar], ['اسم الفاعل', e.faail], ['اسم المفعول', e.mafool]]
-      .filter(r => r[1]);
-    kaart.appendChild(el('div', 'uitleg vormen', regels.map(([k, w]) => `<div><span class="klein">${k}</span> <span class="ar">${esc(w)}</span></div>`).join('')));
+    if (soort === 'ww') {
+      const regels = [['الماضي', e.madi || e.lemma], ['المضارع', e.mudari], ['الأمر', e.amr], ['المصدر', e.masdar], ['اسم الفاعل', e.faail], ['اسم المفعول', e.mafool]]
+        .filter(r => r[1]);
+      kaart.appendChild(el('div', 'uitleg vormen', regels.map(([k, w]) => `<div><span class="klein">${k}</span> <span class="ar">${esc(w)}</span></div>`).join('')));
+    } else {
+      kaart.appendChild(el('div', 'uitleg', `<span class="ar">${esc(e.lemma)}</span> — ${esc(e.nl)} <span class="klein">stam <span class="ar">${esc(e.root.split('').join(' '))}</span></span>`));
+    }
   }
   blad.appendChild(kaart);
   const a = el('div', 'acties');
-  if (V.antwoord != null) {
+  if (R.antwoord != null) {
     const n = el('button', 'knop', 'Volgende');
-    n.onclick = () => { V.volgende = true; teken(); };
+    n.onclick = () => {
+      const kop = R.rij.shift();
+      if (R.uitslag[kop] === 'mis') R.rij.splice(Math.min(R.rij.length, 2 + Math.floor(Math.random() * 2)), 0, kop);
+      R.antwoord = null;
+      R.vraag = R.rij.length ? maakVraag(R.rij[0]) : null;
+      teken(); window.scrollTo(0, 0);
+    };
     a.appendChild(n);
   }
   blad.appendChild(a);
@@ -2349,6 +2531,46 @@ function wiKnoppen(veld, opties) {
   return wr;
 }
 
+/* ---------------- wazn van een werkwoord ----------------
+   De woordenbank kent geen wazn; we leiden hem af uit de verleden tijd
+   (lemma) en de stamletters. Uitkomst: 'I' t/m 'X', 'Q' (فَعْلَلَ) of
+   'QII' (تَفَعْلَلَ) of 'QIV' (اِفْعَلَلَّ). */
+const WAZNS = [
+  ['I', 'فَعَلَ', 'يَفْعَلُ', 'اِفْعَلْ'], ['II', 'فَعَّلَ', 'يُفَعِّلُ', 'فَعِّلْ'], ['III', 'فاعَلَ', 'يُفاعِلُ', 'فاعِلْ'],
+  ['IV', 'أَفْعَلَ', 'يُفْعِلُ', 'أَفْعِلْ'], ['V', 'تَفَعَّلَ', 'يَتَفَعَّلُ', 'تَفَعَّلْ'], ['VI', 'تَفاعَلَ', 'يَتَفاعَلُ', 'تَفاعَلْ'],
+  ['VII', 'اِنْفَعَلَ', 'يَنْفَعِلُ', 'اِنْفَعِلْ'], ['VIII', 'اِفْتَعَلَ', 'يَفْتَعِلُ', 'اِفْتَعِلْ'], ['IX', 'اِفْعَلَّ', 'يَفْعَلُّ', 'اِفْعَلَّ'],
+  ['X', 'اِسْتَفْعَلَ', 'يَسْتَفْعِلُ', 'اِسْتَفْعِلْ'], ['Q', 'فَعْلَلَ', 'يُفَعْلِلُ', 'فَعْلِلْ'], ['QII', 'تَفَعْلَلَ', 'يَتَفَعْلَلُ', 'تَفَعْلَلْ'], ['QIV', 'اِفْعَلَلَّ', 'يَفْعَلِلُّ', 'اِفْعَلِلَّ'],
+];
+const WAZN_DIA = /[ً-ِْٰـ]/g;   /* alle tekens behalve de shadda */
+const HAMZA = /[أإآءؤئ]/g;
+function waznVan(e) {
+  if (!e || e.cat !== 'fil') return null;
+  if (e._wazn !== undefined) return e._wazn;
+  const r = (e.root || '').replace(HAMZA, 'ء');
+  let s = (e.madi || e.lemma || '').replace(WAZN_DIA, '').replace(/ٱ/g, 'ا');
+  const kaal = s.replace(/ّ/g, '');          /* zonder shadda */
+  const n = kaal.length;
+  const h = kaal.replace(HAMZA, 'ء');
+  let w;
+  if (r.length === 4) w = /^ت/.test(h) && h[1] === r[0] ? 'QII' : /^ا/.test(h) ? 'QIV' : 'Q';
+  else if (/^است/.test(h) && n >= 5 && r[0] !== 'س') w = 'X';
+  else if (/^ان/.test(h) && r[0] !== 'ن') w = 'VII';
+  else if (/^ا/.test(h) && n >= 4) {
+    /* اِفْعَلَّ: shadda op de laatste letter, en geen verdubbelde stam */
+    w = /ّ$/.test(s) && r[1] !== r[2] && !/^ا.ت/.test(h) ? 'IX' : 'VIII';
+  }
+  else if (/^ء/.test(h) && r[0] !== 'ء') w = 'IV';
+  /* آ = أَأْ (IV: آمَنَ يُؤْمِنُ) of أَا (III: آخَذَ يُؤاخِذُ); de مضارع beslist */
+  else if (/^آ/.test(kaal) && r[0] === 'ء') w = /ؤا/.test((e.mudari || '').replace(WAZN_DIA, '')) || /^مؤا/.test((e.masdar || '').replace(WAZN_DIA, '')) ? 'III' : 'IV';
+  else if (/^ت/.test(h) && (r[0] !== 'ت' || /^تت/.test(h)) && n >= 4) w = h[2] === 'ا' ? 'VI' : 'V';
+  else if (n >= 4 && h[1] === 'ا') w = 'III';
+  else if (/^.ّ?.ّ/.test(s) && s.indexOf('ّ') === 2 && !(r[1] === r[2] && n === 2)) w = 'II';
+  else if (n === 4 && /^ء/.test(h)) w = 'IV';
+  else w = 'I';
+  e._wazn = w;
+  return w;
+}
+
 function tekenIndex() {
   const wi = S.wi;
   const blad = el('div', 'blad');
@@ -2361,6 +2583,7 @@ function tekenIndex() {
   const zoekAr = sorteersleutel(wi.zoek.trim());
   const zoekNl = wi.zoek.trim().toLowerCase();
   const rijen = [];
+  const waznTel = {};
   for (const id of bron) {
     const e = lem(id);
     /* bouwsteentjes horen hier net zomin thuis als in de voortgangsbalk */
@@ -2370,6 +2593,9 @@ function tekenIndex() {
     const k = sorteersleutel(e.lemma);
     if (wi.zoek.trim() && !k.includes(zoekAr) &&
         !(e.nl || '').toLowerCase().includes(zoekNl)) continue;
+    if (wi.soort !== 'alles' && e.cat !== wi.soort) continue;
+    if (e.cat === 'fil') waznTel[waznVan(e)] = (waznTel[waznVan(e)] || 0) + 1;
+    if (wi.soort === 'fil' && wi.wazn !== 'alles' && waznVan(e) !== wi.wazn) continue;
     rijen.push({ id, e, k });
   }
   rijen.sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
@@ -2402,7 +2628,7 @@ function tekenIndex() {
     }, 220);
   };
   balk.appendChild(zoek);
-  balk.appendChild(wiKnoppen('bereik', [['gekend', 'Gekend'], ['moeilijk', 'Moeilijk'], ['alles', 'Alles']]));
+  balk.appendChild(wiKnoppen('bereik', [['gekend', 'Bekend'], ['moeilijk', 'Moeilijk'], ['alles', 'Alles']]));
   balk.appendChild(wiKnoppen('op', [['woord', 'Op woord'], ['wortel', 'Op wortel']]));
   /* de boektitels zijn te lang voor knoppen */
   const bk = el('select', 'les-kies');
@@ -2418,6 +2644,38 @@ function tekenIndex() {
   bk.onchange = () => { wi.boek = bk.value; teken(); };
   balk.appendChild(bk);
   blad.appendChild(balk);
+
+  /* ---- soort woord, en bij werkwoorden de wazn ---- */
+  const balk2 = el('div', 'wi-balk');
+  const sk = wiKnoppen('soort', [['alles', 'Alle soorten'], ['ism', 'اسم'], ['fil', 'فعل'], ['harf', 'حرف']]);
+  sk.querySelectorAll('.wi-kn').forEach((b, i) => { if (i) b.classList.add('ar-kn'); });
+  balk2.appendChild(sk);
+  if (wi.soort === 'fil') {
+    const wz = el('select', 'les-kies wazn-kies');
+    wz.setAttribute('aria-label', 'Filter op wazn');
+    wz.style.marginLeft = '0';
+    const opt = (waarde, tekst) => {
+      const o = document.createElement('option');
+      o.value = waarde; o.textContent = tekst;
+      if (wi.wazn === waarde) o.selected = true;
+      wz.appendChild(o);
+    };
+    opt('alles', 'Alle wazns');
+    for (const [code, madi] of WAZNS) if (waznTel[code] || wi.wazn === code) opt(code, `${code} · ${madi} (${waznTel[code] || 0})`);
+    wz.onchange = () => { wi.wazn = wz.value; teken(); };
+    balk2.appendChild(wz);
+  }
+  blad.appendChild(balk2);
+  const metVormen = wi.soort === 'fil' && wi.wazn !== 'alles';
+  if (metVormen) {
+    const [code, madi, mud, amr] = WAZNS.find(x => x[0] === wi.wazn);
+    const mudTekst = code === 'I' ? 'يَفْعُلُ / يَفْعِلُ / يَفْعَلُ' : mud;
+    const amrTekst = code === 'I' ? 'اُفْعُلْ / اِفْعِلْ / اِفْعَلْ' : amr;
+    blad.appendChild(el('div', 'wazn-patroon',
+      `<span class="lbl">ماضٍ</span><span class="ar">${madi}</span>` +
+      `<span class="lbl">مُضارِع</span><span class="ar">${mudTekst}</span>` +
+      `<span class="lbl">أَمْر</span><span class="ar">${amrTekst}</span>`));
+  }
 
   if (!rijen.length) {
     blad.appendChild(el('div', 'leeg', wi.zoek.trim()
@@ -2484,8 +2742,11 @@ function tekenIndex() {
   const stukken = [];
   groepen.forEach((g, i) => {
     const rs = g.rijen.map(r =>
-      `<button class="wi-rij c-${r.e.cat}" data-id="${esc(r.id)}">` +
-      `<span class="wi-ar">${esc(r.e.lemma)}</span>` +
+      `<button class="wi-rij c-${r.e.cat}${metVormen ? ' ww' : ''}" data-id="${esc(r.id)}">` +
+      (metVormen
+        ? `<span class="wi-vormen"><span class="wi-ar">${esc(r.e.madi || r.e.lemma)}</span>` +
+          `<span class="wi-ar">${esc(r.e.mudari || '')}</span><span class="wi-ar">${esc(r.e.amr || '')}</span></span>`
+        : `<span class="wi-ar">${esc(r.e.lemma)}</span>`) +
       `<span class="wi-nl">${esc(r.e.nl || '')}</span>` +
       (S.moeilijk.has(r.id) ? '<span class="wi-ml" aria-label="moeilijk"></span>' : '') +
       '</button>').join('');
@@ -2495,7 +2756,7 @@ function tekenIndex() {
       `<span class="tel">${g.rijen.length}</span></div>` +
       `<div class="wi-rijen">${rs}</div></div>`);
   });
-  const wrap = el('div', 'woordindex', stukken.join(''));
+  const wrap = el('div', 'woordindex' + (metVormen ? ' met-vormen' : ''), stukken.join(''));
   wrap.onclick = ev => {
     const b = ev.target.closest('.wi-rij');
     if (b) toonWoord([b.dataset.id], null, null, null, null);
@@ -2736,7 +2997,7 @@ document.getElementById('btnExport').onclick = () => {
   a.download = 'qirat-voortgang-' + Opslag.gebruiker + '.json'; a.click();
 };
 document.getElementById('btnWis').onclick = async () => {
-  if (!confirm('Weet je het zeker?\n\nAl je voortgang wordt gewist: gekende woorden, ' +
+  if (!confirm('Weet je het zeker?\n\nAl je voortgang wordt gewist: bekende woorden, ' +
       'moeilijke woorden en afgeronde lessen. Dit kan niet ongedaan worden.' +
       (Wolk.klaar ? '\n\nOok online, en dus op al je apparaten.' : ''))) return;
   localStorage.removeItem(Opslag.sleutel());
