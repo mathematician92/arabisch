@@ -640,7 +640,7 @@ function lesInHoofdstuk(nr, boek = S.boek) {
    reeks en zie je het overzicht van al haar boeken. */
 const REEKSEN = [
   { id: 'aby', naam: 'Al-ʿArabiyya bayna yadayk', ar: 'العربية بين يديك',
-    boeken: ['bayna', 'baynatwee', 'baynatwee2', 'baynadrie', 'baynadrie2'] },
+    boeken: ['bayna', 'baynatwee', 'baynatwee2', 'baynadrie', 'baynadrie2', 'baynavier', 'baynavier2'] },
   { id: 'lees', naam: 'Leesboeken', ar: 'قصص النبيين · القراءة الراشدة',
     boeken: ['qasas', 'qirat'] },
 ];
@@ -648,10 +648,10 @@ const reeksVan = boek => REEKSEN.find(r => r.boeken.includes(boek)) || null;
 /* Bayna: de kleur van de omslag (boek 4 wordt rood, #B5372F). Qirāʾa en Qaṣaṣ
    krijgen een kleur die op geen van die vier lijkt: paars en turkoois. */
 const BOEK_KLEUR = { bayna: '#D5893D', baynatwee: '#7C984E', baynatwee2: '#7C984E',
-                     baynadrie: '#3F6B98', baynadrie2: '#3F6B98',
+                     baynadrie: '#3F6B98', baynadrie2: '#3F6B98', baynavier: '#B5372F', baynavier2: '#B5372F',
                      qirat: '#7D4FA6', qasas: '#17969C' };
 const BOEK_KORT = { bayna: 'ABY B1', baynatwee: 'ABY B2D1', baynatwee2: 'ABY B2D2',
-                    baynadrie: 'ABY B3D1', baynadrie2: 'ABY B3D2', qasas: 'Qaṣaṣ', qirat: 'Qirāʾa' };
+                    baynadrie: 'ABY B3D1', baynadrie2: 'ABY B3D2', baynavier: 'ABY B4D1', baynavier2: 'ABY B4D2', qasas: 'Qaṣaṣ', qirat: 'Qirāʾa' };
 
 /* Waar een woord staat, kort: in het eigen boek 'les 5' of 'H2 les 1',
    uit een ander boek 'ABY B2D1L2', 'Qaṣaṣ H2L1' of 'Qirāʾa L5'. */
@@ -1126,14 +1126,23 @@ function tekenLijst(titel, sub, metActies) {
 /* Herkent het vragenkader van Boek 3: de eerste regel is 'ما قبل القراءة',
    de eerste regel zonder leesteken daarna is de titel van de tekst.
    kop = de regels die geen vraag zijn maar een tussenkopje ('beantwoord…:'). */
-const VL_TUSSEN = { baynadrie: { 2: [0], 8: [2] }, baynadrie2: { 3: [2] } };   /* per boek en les: regels die ook tussenkop zijn */
+const VL_TUSSEN = { baynadrie: { 2: [0], 8: [2] }, baynadrie2: { 3: [2] }, baynavier: { 1: [0], 3: [0], 5: [0], 7: [0], 9: [0], 11: [0], 13: [0], 15: [0] }, baynavier2: { 1: [0], 3: [0], 5: [0], 7: [0], 9: [0], 11: [0], 13: [0], 15: [0] } };   /* per boek en les: regels die ook tussenkop zijn */
 function vragenIndeling(zinnen, kopTitel) {
   if (!zinnen.length) return null;
   const kaal = z => z.woorden.map(w => w.w).join(' ').replace(/[\u064B-\u0652\u0670]/g, '');
   const k0 = kaal(zinnen[0]);
   let titel = -1;
-  if (['baynadrie', 'baynadrie2'].includes(S.boek) && k0 === 'ما قبل القراءة') {
-    for (let i = 1; i < zinnen.length; i++) {
+  if (['baynadrie', 'baynadrie2', 'baynavier', 'baynavier2'].includes(S.boek) && k0 === 'ما قبل القراءة') {
+    /* Boek 4: een titel kan op een vraagteken eindigen (les 11), dus eerst
+       zoeken naar de regel die gelijk is aan de titel van de les */
+    if (['baynavier', 'baynavier2'].includes(S.boek) && kopTitel) {
+      const schoon = t => t.replace(/[\u064B-\u0652\u0670]/g, '').replace(/[؟?!.:،,]/g, '').replace(/\s+/g, ' ').trim();
+      const doel = schoon(kopTitel);
+      for (let i = 1; i < Math.min(zinnen.length, 40); i++) {
+        if (zinnen[i].regeleinde && schoon(kaal(zinnen[i])) === doel) { titel = i; break; }
+      }
+    }
+    if (titel < 0) for (let i = 1; i < zinnen.length; i++) {
       if (!zinnen[i].eind && zinnen[i].regeleinde) { titel = i; break; }
     }
   } else if (['baynatwee', 'baynatwee2'].includes(S.boek) && k0 === 'تهيئة' && kopTitel) {
@@ -1187,8 +1196,9 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
       /* Een getal of jaartal: hoort in de zin maar is geen woord om te leren.
          Neutraal tonen, niet aanklikbaar, telt niet mee als 'nog te leren'. */
       if (!w.ids.length) {
-        span.appendChild(el('span', 'getal', w.w));
-        span.appendChild(document.createTextNode(' '));
+        /* haakjes en het streepje van ١٣٣٠-١٤٢٠ blijven erbij (hv/hn) */
+        span.appendChild(el('span', 'getal', esc((w.hv || '') + w.w + (w.hn || ''))));
+        if (w.hn !== '-') span.appendChild(document.createTextNode(' '));
         return;
       }
       let inhoud = w.ids.filter(i => lem(i) && losStaand(i));
@@ -1256,7 +1266,8 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
       } else {
         span.appendChild(s);
       }
-      span.appendChild(document.createTextNode(' '));
+      /* jaartallen als ١٣٣٠-١٤٢٠: geen spatie na het streepje */
+      if (w.hn !== '-') span.appendChild(document.createTextNode(' '));
     });
     if (z.eind) {
       /* het leesteken mag niet los naar de volgende regel springen */

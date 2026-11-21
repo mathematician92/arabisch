@@ -167,6 +167,11 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 36px}
   border-top:2px solid var(--rubric);border-bottom:2px solid var(--rubric);
   border-radius:4px;padding:.05em .5em;margin:.2em 0 .6em;line-height:2}
 .tekst-titel .w{color:inherit}
+/* Boek 4: het kader is rood, zoals in het boek */
+.tekst[data-boek="baynavier"] .vl-kader,.tekst[data-boek="baynavier2"] .vl-kader{background:color-mix(in srgb,var(--rubric) 7%,var(--card));
+  border-color:color-mix(in srgb,var(--rubric) 35%,var(--card));border-inline-start-color:var(--rubric)}
+.tekst[data-boek="baynavier"] .vl-kop,.tekst[data-boek="baynavier2"] .vl-kop{color:var(--rubric);border-bottom-color:color-mix(in srgb,var(--rubric) 30%,var(--card))}
+.tekst[data-boek="baynavier"] .vl-nr,.tekst[data-boek="baynavier2"] .vl-nr{background:var(--rubric)}
 /* Boek 2: vragenkader zonder kleur, zoals in het boek */
 .vl-kader.kaal{background:none;border:1px solid var(--line);border-inline-start:1px solid var(--line)}
 .vl-kader.kaal .vl-kop{color:var(--ink);border-bottom-color:var(--line)}
