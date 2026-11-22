@@ -640,7 +640,7 @@ function lesInHoofdstuk(nr, boek = S.boek) {
    reeks en zie je het overzicht van al haar boeken. */
 const REEKSEN = [
   { id: 'aby', naam: 'Al-ʿArabiyya bayna yadayk', ar: 'العربية بين يديك',
-    boeken: ['baynaeen', 'baynaeen2', 'bayna', 'baynatwee', 'baynatwee2', 'baynadrie', 'baynadrie2', 'baynavier', 'baynavier2'] },
+    boeken: ['baynaeen', 'baynaeen2', 'baynatwee', 'baynatwee2', 'baynadrie', 'baynadrie2', 'baynavier', 'baynavier2'] },
   { id: 'lees', naam: 'Leesboeken', ar: 'قصص النبيين · القراءة الراشدة',
     boeken: ['qasas', 'qirat'] },
 ];
