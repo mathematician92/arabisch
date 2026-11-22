@@ -640,17 +640,17 @@ function lesInHoofdstuk(nr, boek = S.boek) {
    reeks en zie je het overzicht van al haar boeken. */
 const REEKSEN = [
   { id: 'aby', naam: 'Al-ʿArabiyya bayna yadayk', ar: 'العربية بين يديك',
-    boeken: ['bayna', 'baynatwee', 'baynatwee2', 'baynadrie', 'baynadrie2', 'baynavier', 'baynavier2'] },
+    boeken: ['baynaeen', 'baynaeen2', 'bayna', 'baynatwee', 'baynatwee2', 'baynadrie', 'baynadrie2', 'baynavier', 'baynavier2'] },
   { id: 'lees', naam: 'Leesboeken', ar: 'قصص النبيين · القراءة الراشدة',
     boeken: ['qasas', 'qirat'] },
 ];
 const reeksVan = boek => REEKSEN.find(r => r.boeken.includes(boek)) || null;
 /* Bayna: de kleur van de omslag (boek 4 wordt rood, #B5372F). Qirāʾa en Qaṣaṣ
    krijgen een kleur die op geen van die vier lijkt: paars en turkoois. */
-const BOEK_KLEUR = { bayna: '#D5893D', baynatwee: '#7C984E', baynatwee2: '#7C984E',
+const BOEK_KLEUR = { baynaeen: '#D5893D', baynaeen2: '#D5893D', bayna: '#D5893D', baynatwee: '#7C984E', baynatwee2: '#7C984E',
                      baynadrie: '#3F6B98', baynadrie2: '#3F6B98', baynavier: '#B5372F', baynavier2: '#B5372F',
                      qirat: '#7D4FA6', qasas: '#17969C' };
-const BOEK_KORT = { bayna: 'ABY B1', baynatwee: 'ABY B2D1', baynatwee2: 'ABY B2D2',
+const BOEK_KORT = { baynaeen: 'ABY B1D1', baynaeen2: 'ABY B1D2', bayna: 'ABY B1X', baynatwee: 'ABY B2D1', baynatwee2: 'ABY B2D2',
                     baynadrie: 'ABY B3D1', baynadrie2: 'ABY B3D2', baynavier: 'ABY B4D1', baynavier2: 'ABY B4D2', qasas: 'Qaṣaṣ', qirat: 'Qirāʾa' };
 
 /* Waar een woord staat, kort: in het eigen boek 'les 5' of 'H2 les 1',
@@ -1184,6 +1184,11 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
      vlak met genummerde vragen; de titel wordt een kopregel. */
   const vl = vragenIndeling(zinnen, titel);
   let kader = null, regel = null, vnr = 0, groep = [];
+  /* Boek 1 (dialogen): een regel die met 'الدرس' begint is de kop van een
+     dialoog; aan het begin van een andere regel staat de naam van de spreker. */
+  const dialoog = ['baynaeen', 'baynaeen2'].includes(S.boek);
+  const kaalZin = z => z.woorden.map(w => w.w).join(' ').replace(/[\u064B-\u0652\u0670]/g, '');
+  let lijnBegin = true, kopLijn = null;
   const sluitGroep = () => {          /* één los punt krijgt geen nummer */
     if (groep.length === 1) groep[0].classList.add('vl-los');
     groep = []; vnr = 0;
@@ -1310,6 +1315,17 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
         if (z.regeleinde) regel = null;
       }
       return;
+    }
+    if (dialoog) {
+      if (lijnBegin && /^الدرس/.test(kaalZin(z))) { kopLijn = el('div', 'dialoog-kop'); t.appendChild(kopLijn); }
+      if (kopLijn) {
+        kopLijn.appendChild(span);
+        if (z.regeleinde) kopLijn = null;
+        lijnBegin = !!z.regeleinde;
+        return;
+      }
+      if (lijnBegin && z.eind === ':') span.classList.add('spreker');
+      lijnBegin = !!z.regeleinde;
     }
     t.appendChild(span);
     /* De brontekst zet elke zin op een eigen regel; die indeling houden we aan. */

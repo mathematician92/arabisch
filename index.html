@@ -259,7 +259,11 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 36px}
    volgt dat. De keuze staat los van de data — je kunt eraan schuiven zonder
    opnieuw te bouwen. */
 .nb{font-family:'IBM Plex Sans',system-ui,sans-serif}
-.tekst[data-boek="bayna"], .tekst[data-boek="baynatwee"], .tekst[data-boek="baynatwee2"]{
+.tekst .dialoog-kop{margin:1.1em 0 .35em;padding-bottom:.2em;color:var(--boek,var(--rubric));font-weight:700;
+  border-bottom:1px solid color-mix(in srgb,var(--boek,var(--rubric)) 30%,transparent)}
+.tekst .dialoog-kop:first-of-type{margin-top:.2em}
+.tekst .zin.spreker .w{font-weight:700;color:var(--boek,var(--rubric))}
+.tekst[data-boek="baynaeen"], .tekst[data-boek="baynaeen2"], .tekst[data-boek="bayna"], .tekst[data-boek="baynatwee"], .tekst[data-boek="baynatwee2"]{
   font-family:'Al Mohanad','Noto Naskh Arabic','Scheherazade New',serif;
   /* De maat moet met --zoom meebewegen, net als de standaardregel hierboven.
      Een vaste waarde als `font-size:.95em` overschrijft die berekening en dan
