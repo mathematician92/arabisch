@@ -11,7 +11,7 @@
 
    VERSIE ophogen bij elke levering: dat ruimt de oude kast op.
 */
-const VERSIE = 'v84';
+const VERSIE = 'v87';
 const SCHIL = 'qiraa-schil-' + VERSIE;
 const SPUL = 'qiraa-spul-' + VERSIE;
 
@@ -101,6 +101,9 @@ self.addEventListener('fetch', ev => {
   if (lettertype) { ev.respondWith(kastEerst(v, SPUL)); return; }
 
   const pad = url.pathname;
+  /* Opnames niet via de kast: de browser vraagt die in stukjes op (Range), en
+     vooral Safari speelt een antwoord uit de kast dan niet af. */
+  if (/\.mp3$/i.test(pad)) return;
   const isSpul = /\/(data|page|icons|lettertype)\//.test(pad) ||
                  /\.(json|png|jpg|jpeg|webp|svg|woff2?)$/i.test(pad);
 

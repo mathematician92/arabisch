@@ -519,7 +519,7 @@ async function laadLes(boek, nr) {
 }
 
 async function gaNaar(boek, nr) {
-  Stem.stop();
+  Stem.stop(); Opname.stop();
   S.scherm = 'les';
   S.boek = boek; S.les = nr; S.stap = 0; S.zin = 0; S.open = 0; S.klaar = false;
   S.geklikt = new Set(); S.vraag = null; S.antwoord = null;
@@ -1227,6 +1227,7 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
       /* w.u is de schrijfwijze van de moshaf; w.w blijft de gewone spelling,
          voor het voorlezen en het opzoeken. */
       const vorm = w.u || w.w;
+      s.dataset.k = zi + '.' + wi;      /* voor de opname: welk woord klinkt */
       if (gl) {
         s.innerHTML = `<span class="gw">${esc(vorm)}</span><span class="glos">${esc(gl.nl)}</span>`;
       } else {
@@ -1416,7 +1417,7 @@ function tekenLeesPaneel() {
   p.onclick = () => {
     if (Stem.bezig) { Stem.stop(); return; }
     const c = Lees.kies(); if (!c) return;
-    Lees.actief = c; aan(); c.speel(uit);
+    Opname.pauze(); Lees.actief = c; aan(); c.speel(uit);
   };
   const stap = (teken_, naam, d) => {
     const b = el('button', 'wi-kn', teken_);
@@ -1451,6 +1452,116 @@ function tekenLeesPaneel() {
   pan.appendChild(balk);
   meetKop();
 }
+
+/* ---------- Opname uit het boek: afspelen en meekleuren ----------
+   Per les kan er in data/audio/ een opname staan (<boek>-<les>.mp3) met de
+   tijden per woord (<boek>-<les>.json: {"zin.woord": [begin, eind]}). Welke
+   lessen een opname hebben staat in data/audio/lijst.json. Zonder die
+   bestanden (of in het losse html-bestand) verschijnt er niets. */
+const Opname = {
+  lijst: null, tijden: {}, au: null, sleutel: null, nu: null, bezig: false, tempo: 1,
+  async laadLijst() {
+    if (this.lijst || window.__DATA__) return;
+    this.lijst = new Set();
+    try {
+      const r = await fetch('data/audio/lijst.json');
+      if (r.ok) this.lijst = new Set(await r.json());
+    } catch (e) { /* geen opnames */ }
+    if (this.lijst.size) teken();
+  },
+  heeft(k) { return !!(this.lijst && this.lijst.has(k)); },
+  async klaarZetten(k) {
+    if (this.sleutel === k && this.au) return true;
+    this.stop();
+    if (!this.tijden[k]) {
+      const r = await fetch('data/audio/' + k + '.json');
+      if (!r.ok) return false;
+      this.tijden[k] = await r.json();
+    }
+    this.sleutel = k;
+    this.au = new Audio('data/audio/' + k + '.mp3');
+    this.au.preload = 'auto';
+    this.au.playbackRate = this.tempo;
+    this.au.onplay = () => { this.bezig = true; this.knop(); this.lus(); };
+    this.au.onpause = () => { this.bezig = false; this.knop(); };
+    this.au.onended = () => { this.bezig = false; this.kleur(null); this.knop(); };
+    return true;
+  },
+  async speel(k) {
+    if (Stem.bezig) Stem.stop();
+    if (!(await this.klaarZetten(k))) return;
+    try { await this.au.play(); } catch (e) { /* de browser wil eerst een tik */ }
+  },
+  pauze() { if (this.au) this.au.pause(); },
+  stop() {
+    if (this.au) { this.au.pause(); this.au.src = ''; }
+    this.au = null; this.sleutel = null; this.bezig = false; this.kleur(null);
+  },
+  naar(k, wk) {
+    const t = this.tijden[k] && this.tijden[k][wk];
+    if (!t) return false;
+    this.speel(k).then(() => { if (this.au) this.au.currentTime = t[0]; });
+    if (this.au) this.au.currentTime = t[0];
+    return true;
+  },
+  /* welk woord klinkt nu */
+  kleur(wk) {
+    if (this.nu === wk) return;
+    document.querySelectorAll('.w.klinkt-nu').forEach(x => x.classList.remove('klinkt-nu'));
+    this.nu = wk;
+    if (!wk) return;
+    const x = document.querySelector('.tekst [data-k="' + wk + '"]');
+    if (!x) return;
+    x.classList.add('klinkt-nu');
+    /* meeschuiven als het woord uit beeld raakt */
+    const r = x.getBoundingClientRect(), top = kopHoogte();
+    if (r.top < top + 10 || r.bottom > window.innerHeight - 30) {
+      window.scrollBy({ top: r.top - top - window.innerHeight / 3, behavior: 'smooth' });
+    }
+  },
+  lus() {
+    if (!this.bezig || !this.au) return;
+    const t = this.au.currentTime, T = this.tijden[this.sleutel] || {};
+    let wk = null;
+    for (const k in T) { const [a, b] = T[k]; if (t >= a && t < b) { wk = k; break; } }
+    this.kleur(wk);
+    requestAnimationFrame(() => this.lus());
+  },
+  knop() {
+    document.querySelectorAll('.opname-knop').forEach(b => {
+      b.innerHTML = this.bezig ? '&#10074;&#10074;' : '&#9654;';
+      b.title = this.bezig ? 'Pauze' : 'Opname afspelen';
+      b.classList.toggle('bezig', this.bezig);
+    });
+  },
+  /* de balk boven de tekst */
+  balk(k) {
+    const b = el('div', 'opname-balk');
+    const p = el('button', 'wi-kn speelknop opname-knop', '&#9654;');
+    p.onclick = () => (this.bezig && this.sleutel === k) ? this.pauze() : this.speel(k);
+    b.appendChild(p);
+    b.appendChild(el('span', 'opname-uitleg', 'Opname uit het boek'));
+    const tk = el('select', 'oefen-kies tempo-kies');
+    tk.title = 'Snelheid'; tk.setAttribute('aria-label', 'Snelheid van de opname');
+    for (const v of [0.75, 0.9, 1]) {
+      const o = document.createElement('option');
+      o.value = String(v); o.textContent = v === 1 ? 'normaal' : String(v).replace('.', ',') + '×';
+      if (v === this.tempo) o.selected = true;
+      tk.appendChild(o);
+    }
+    tk.onchange = () => { this.tempo = parseFloat(tk.value); if (this.au) this.au.playbackRate = this.tempo; };
+    b.appendChild(tk);
+    setTimeout(() => this.knop());
+    return b;
+  },
+};
+/* tijdens het afspelen: een woord aantikken = daarheen springen */
+document.addEventListener('click', ev => {
+  if (!Opname.bezig) return;
+  const w = ev.target.closest && ev.target.closest('.tekst .w[data-k]');
+  if (!w) return;
+  if (Opname.naar(Opname.sleutel, w.dataset.k)) { ev.stopPropagation(); ev.preventDefault(); }
+}, true);
 const Stem = {
   lijst: [], arabisch: [], stem: null, rij: [], idx: 0, bezig: false,
   beurt: 0,           // elke leesronde krijgt een nummer, zie speel()
@@ -3369,6 +3480,7 @@ function teken() {
   if (S.stap === 0) {
     const blad = tekenTekst(L.zinnen, lesKern(L.titel),
 '', true);
+    if (Opname.heeft(lesSleutel())) blad.insertBefore(Opname.balk(lesSleutel()), blad.firstChild);
     const tel = el('div', 'balk-tekst');
     tel.style.marginTop = '16px';
     tel.textContent = S.geklikt.size
@@ -3462,6 +3574,7 @@ function teken() {
   else if (S.stap === 5) {
     const blad = tekenTekst(L.zinnen, lesKern(L.titel),
 '', true);
+    if (Opname.heeft(lesSleutel())) blad.insertBefore(Opname.balk(lesSleutel()), blad.firstChild);
     const tel = el('div', 'balk-tekst');
     tel.style.marginTop = '16px';
     tel.textContent = S.geklikt.size
@@ -3612,6 +3725,7 @@ document.getElementById('main').addEventListener('click', sluitMenus);
     keurGeklikt();
     pasWeergaveToe();
     teken();
+    Opname.laadLijst();
     if (y) {
       /* de pagina is pas helemaal hoog als de lettertypes er zijn */
       const zet = () => { if (window.scrollY < y - 20) window.scrollTo(0, y); };
