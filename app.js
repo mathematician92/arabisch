@@ -727,7 +727,7 @@ function tekenKop() {
   }
   kies.onchange = () => {
     if (kies.value.startsWith('h:')) {
-      Stem.stop();
+      Stem.stop(); Opname.stop();
       S.hfd = Number(kies.value.slice(2)); S.scherm = 'boek';
       teken();
       const doel = document.getElementById('ovh-' + S.boek + '-' + S.hfd);
@@ -764,7 +764,7 @@ function tekenKop() {
     for (const b of S.index.boeken) if (!gehad.has(b.id)) optie(bk, b.id, b.ondertitel || b.titel, S.scherm !== 'reeks' && b.id === S.boek);
     bk.onchange = () => {
       if (bk.value.startsWith('reeks:')) {
-        Stem.stop();
+        Stem.stop(); Opname.stop();
         S.reeks = bk.value.slice(6); S.scherm = 'reeks';
         teken(); window.scrollTo(0, 0);
         return;
@@ -790,7 +790,7 @@ function tekenKop() {
         S.geklikt = new Set();
       }
       /* een stap aanklikken brengt je terug uit Mijn woorden */
-      Stem.stop();
+      Stem.stop(); Opname.stop();
       S.scherm = 'les';
       S.stap = i; S.antwoord = null; teken(); window.scrollTo(0, 0);
     };
@@ -1385,21 +1385,31 @@ const Lees = {
     return this.lijst.find(c => c.t.isConnected && c.t.getBoundingClientRect().bottom > top + 40) || this.lijst[0];
   },
 };
+function opnameModus() {
+  return !window.__DATA__ && (S.stap === 0 || S.stap === 5) && Opname.heeft(lesSleutel());
+}
 function tekenLeesPaneel() {
   const knoppen = ['btnLees', 'btnLeesMob'].map(id => document.getElementById(id)).filter(Boolean);
   const pan = document.getElementById('leesPaneel');
   if (!pan) return;
-  const heeft = Stem.kan() && Lees.lijst.length > 0;
+  /* Heeft deze les een opname uit het boek (en staat de lestekst op het
+     scherm: stap Lezen of Herhaling), dan speelt deze knop de opname af in
+     plaats van de computerstem. */
+  const opn = opnameModus();
+  const heeft = (opn || Stem.kan()) && Lees.lijst.length > 0;
   const open = heeft && Lees.open;
   knoppen.forEach(k => {
     k.hidden = !heeft;
     k.classList.toggle('aan', open);
-    k.classList.toggle('klinkt', heeft && Stem.bezig);
+    k.classList.toggle('opname', opn);
+    k.title = opn ? 'Opname uit het boek' : 'Voorlezen';
+    k.classList.toggle('klinkt', heeft && (opn ? Opname.bezig : Stem.bezig));
     k.setAttribute('aria-expanded', String(open));
   });
   pan.hidden = !open;
   pan.innerHTML = '';
   if (!open) { meetKop(); return; }
+  if (opn) { pan.appendChild(Opname.paneel(lesSleutel())); meetKop(); return; }
 
   const balk = el('div', 'leesbalk');
   const p = el('button', 'wi-kn speelknop', Stem.bezig ? '&#9632;' : '&#9654;');
@@ -1528,31 +1538,66 @@ const Opname = {
     requestAnimationFrame(() => this.lus());
   },
   knop() {
+    const aan = this.bezig;
     document.querySelectorAll('.opname-knop').forEach(b => {
-      b.innerHTML = this.bezig ? '&#10074;&#10074;' : '&#9654;';
-      b.title = this.bezig ? 'Pauze' : 'Opname afspelen';
-      b.classList.toggle('bezig', this.bezig);
+      b.innerHTML = aan ? '&#10074;&#10074;' : '&#9654;';
+      b.title = aan ? 'Pauze' : 'Opname afspelen';
+      b.setAttribute('aria-label', b.title);
+      b.classList.toggle('bezig', aan);
+    });
+    ['btnLees', 'btnLeesMob'].forEach(id => {
+      const k = document.getElementById(id);
+      if (k) k.classList.toggle('klinkt', aan && opnameModus());
     });
   },
-  /* de balk boven de tekst */
-  balk(k) {
-    const b = el('div', 'opname-balk');
-    const p = el('button', 'wi-kn speelknop opname-knop', '&#9654;');
-    p.onclick = () => (this.bezig && this.sleutel === k) ? this.pauze() : this.speel(k);
-    b.appendChild(p);
-    b.appendChild(el('span', 'opname-uitleg', 'Opname uit het boek'));
+  /* sleutels van de woorden met een tijd, op volgorde */
+  volgorde(k) {
+    const T = this.tijden[k] || {};
+    return Object.keys(T).sort((a, b) => T[a][0] - T[b][0]);
+  },
+  /* naar het begin van de vorige/volgende zin (d = -1 / 1) */
+  async zin(k, d) {
+    if (!(await this.klaarZetten(k))) return;
+    const T = this.tijden[k], ks = this.volgorde(k);
+    const t = this.au.currentTime;
+    const zinVan = x => +x.split('.')[0];
+    /* begin van elke zin */
+    const begins = [];
+    ks.forEach(x => { if (!begins.length || zinVan(begins[begins.length - 1]) !== zinVan(x)) begins.push(x); });
+    let i = begins.findIndex(x => T[x][0] > t + 0.05) - 1;
+    if (i < -1) i = begins.length - 1;
+    /* 'vorige' binnen de eerste seconde van een zin: echt de vorige */
+    if (d < 0 && i >= 0 && t - T[begins[i]][0] < 1) i -= 1;
+    const doel = begins[Math.max(0, Math.min(begins.length - 1, d < 0 ? i : i + 1))];
+    if (!doel) return;
+    this.au.currentTime = T[doel][0];
+    if (!this.bezig) this.speel(k);
+  },
+  /* het paneel onder de knop Voorlezen */
+  paneel(k) {
+    const balk = el('div', 'leesbalk');
+    const kn = (teken_, naam, f, kl) => {
+      const b = el('button', 'wi-kn' + (kl ? ' ' + kl : ''), teken_);
+      b.title = naam; b.setAttribute('aria-label', naam); b.onclick = f;
+      return b;
+    };
+    balk.appendChild(kn('&#9664;&#9664;', 'Vorige zin', () => this.zin(k, -1)));
+    balk.appendChild(kn('&#9654;', 'Opname afspelen',
+      () => (this.bezig && this.sleutel === k) ? this.pauze() : this.speel(k), 'speelknop opname-knop'));
+    balk.appendChild(kn('&#9654;&#9654;', 'Volgende zin', () => this.zin(k, 1)));
     const tk = el('select', 'oefen-kies tempo-kies');
     tk.title = 'Snelheid'; tk.setAttribute('aria-label', 'Snelheid van de opname');
     for (const v of [0.75, 0.9, 1]) {
       const o = document.createElement('option');
       o.value = String(v); o.textContent = v === 1 ? 'normaal' : String(v).replace('.', ',') + '×';
-      if (v === this.tempo) o.selected = true;
+      if (Math.abs(v - this.tempo) < 0.001) o.selected = true;
       tk.appendChild(o);
     }
     tk.onchange = () => { this.tempo = parseFloat(tk.value); if (this.au) this.au.playbackRate = this.tempo; };
-    b.appendChild(tk);
+    balk.appendChild(tk);
+    balk.appendChild(el('span', 'opname-uitleg', 'opname uit het boek'));
     setTimeout(() => this.knop());
-    return b;
+    return balk;
   },
 };
 /* tijdens het afspelen: een woord aantikken = daarheen springen */
@@ -1699,7 +1744,7 @@ function luidspreker(tekst, klasse) {
   b.title = 'Voorlezen';
   b.onclick = ev => {
     ev.stopPropagation();
-    Stem.stop();
+    Stem.stop(); Opname.pauze();
     Stem.zeg(tekst, null);
   };
   return b;
@@ -3480,7 +3525,6 @@ function teken() {
   if (S.stap === 0) {
     const blad = tekenTekst(L.zinnen, lesKern(L.titel),
 '', true);
-    if (Opname.heeft(lesSleutel())) blad.insertBefore(Opname.balk(lesSleutel()), blad.firstChild);
     const tel = el('div', 'balk-tekst');
     tel.style.marginTop = '16px';
     tel.textContent = S.geklikt.size
@@ -3574,7 +3618,6 @@ function teken() {
   else if (S.stap === 5) {
     const blad = tekenTekst(L.zinnen, lesKern(L.titel),
 '', true);
-    if (Opname.heeft(lesSleutel())) blad.insertBefore(Opname.balk(lesSleutel()), blad.firstChild);
     const tel = el('div', 'balk-tekst');
     tel.style.marginTop = '16px';
     tel.textContent = S.geklikt.size
