@@ -34,6 +34,8 @@
   --merk:#C08A1E;       /* amber — woord dat je niet kent */
   --merk-vlak:#F6E7B8;
   --groen:#3E7D3B;
+  --moei:#B3261E;       /* rood — moeilijk woord */
+  --nieuw:#3B5BDB;      /* blauw — knop nieuw/eerder */
   --shadow:0 1px 0 rgba(23,25,15,.06), 0 2px 8px rgba(23,25,15,.05);
   --r:3px;
   --zoom:1;
@@ -45,7 +47,7 @@ body.donker{
   --paper:#16181A; --card:#1E2124; --ink:#E8E6DF; --ink-2:#9EA49C;
   --line:#33383C; --faded:#5D6560; --rubric:#D98A93; --carry:#7FB9C6;
   --merk:#D2A93F; --merk-vlak:#4A3C18;
-  --groen:#7BBF6E;
+  --groen:#7BBF6E; --moei:#EF7B70; --nieuw:#8EA6F5;
   --ism:#5A5F51; --fil:#A8535D; --harf:#3E7B8A;
   --shadow:0 1px 0 rgba(0,0,0,.3), 0 2px 8px rgba(0,0,0,.25);
 }
@@ -216,6 +218,36 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 36px}
 .w.teleren:hover{background-image:none;background-color:#EDEFE7}
 .w.actief{background:var(--rubric);color:#fff}
 .zin-eind{color:var(--ink-2)}
+/* knop Alle / Nieuw / Eerder bij het lezen */
+.zicht-knop{display:inline-flex;align-items:center;gap:6px}
+.zicht-knop[hidden]{display:none}
+.zicht-ic{display:inline-block;width:11px;height:11px;border-radius:50%;border:1.5px solid currentColor;
+  background:linear-gradient(90deg,currentColor 50%,transparent 50%);flex:0 0 auto}
+.zicht-knop.aan{border-color:var(--nieuw);color:var(--nieuw);background:color-mix(in srgb,var(--nieuw) 9%,var(--card))}
+.mob-zicht{display:none}
+.tekst .w.vaag{color:color-mix(in srgb,var(--ink) 28%,var(--card))}
+.tekst .w.moei{color:var(--moei);font-weight:700}
+/* woordenlijst: Alle / Nieuw / Eerder gezien, en bij Eerder gezien Moeilijk / Makkelijk */
+.wseg{display:flex;gap:2px;margin:16px 0 0;padding:3px;border:1px solid var(--line);border-radius:22px;
+  background:color-mix(in srgb,var(--paper) 55%,var(--card))}
+.wseg-k{flex:1 1 0;min-width:0;padding:7px 4px;border-radius:18px;font-family:'IBM Plex Sans',system-ui,sans-serif;
+  font-size:13.5px;font-weight:500;color:var(--ink-2);white-space:nowrap}
+.wseg-k em{font-style:normal;font-weight:400;font-size:12px;margin-left:5px;color:var(--ink-2)}
+.wseg-k.aan{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.wfilter{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:9px 0 0;padding-left:4px}
+.wf-pijl{color:var(--ink-2);font-size:13px;margin-right:2px}
+.wf-k{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:12.5px;padding:4px 11px;border-radius:14px;
+  border:1px solid var(--line);color:var(--ink-2);background:var(--card)}
+.wf-k.aan{font-weight:600;border-color:var(--ink);color:var(--ink)}
+.wf-moeilijk.aan{border-color:var(--moei);color:var(--moei);background:color-mix(in srgb,var(--moei) 8%,var(--card))}
+.wf-makkelijk.aan{border-color:var(--groen);color:var(--groen);background:color-mix(in srgb,var(--groen) 8%,var(--card))}
+.wlabs{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.wlab{font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:10.5px;line-height:15px;padding:0 7px;border-radius:9px;
+  background:color-mix(in srgb,var(--ink-2) 10%,var(--card));color:var(--ink-2)}
+.wlab.n{background:color-mix(in srgb,var(--nieuw) 11%,var(--card));color:var(--nieuw)}
+.wlab.mak{background:color-mix(in srgb,var(--groen) 12%,var(--card));color:var(--groen)}
+.wlab.moei{background:color-mix(in srgb,var(--moei) 11%,var(--card));color:var(--moei)}
+
 /* Al-Mohanad — de letter van العربية بين يديك. Die staat niet op Google Fonts,
    dus het bestand hoort naast index.html te staan als lettertype/al-mohanad.ttf
    (of .woff2, wat kleiner en sneller is). Ontbreekt het bestand, dan valt de
@@ -917,6 +949,10 @@ button.pil-ev{cursor:pointer;border-color:var(--carry)}
   .mob-lees{display:block;flex:0 0 auto;width:38px;height:34px;border:1px solid var(--line);border-radius:var(--r);
     background:var(--card);font-size:16px;line-height:1;color:var(--ink)}
   .mob-lees[hidden]{display:none}
+  .mob-zicht{display:inline-flex;flex:0 0 auto;height:34px;padding:0 8px;border:1px solid var(--line);border-radius:var(--r);
+    background:var(--card);font-size:12.5px;color:var(--ink)}
+  .mob-zicht[hidden]{display:none}
+  header .zicht-knop.kop-knop{display:none}
   header .lees-knop{display:none}
   header .hwrap{display:none;padding-bottom:10px}
   header.menu-open .hwrap{display:flex}
@@ -949,6 +985,7 @@ button.pil-ev{cursor:pointer;border-color:var(--carry)}
     <button class="mob-menu" id="btnMenu" aria-label="Menu" aria-expanded="false">&#9776;</button>
     <span class="mob-titel" id="mobTitel"></span>
     <button class="mob-lees" id="btnLeesMob" hidden aria-label="Voorlezen" aria-expanded="false">&#128264;</button>
+    <button class="mob-zicht zicht-knop" id="btnZichtMob" hidden></button>
     <button class="mob-stap" id="btnStap" aria-expanded="false"></button>
   </div>
   <div class="hwrap">
@@ -960,6 +997,7 @@ button.pil-ev{cursor:pointer;border-color:var(--carry)}
       <div class="knop-groep">
       <button class="kop-knop wie-knop" id="btnWie" hidden></button>
       <button class="kop-knop lees-knop" id="btnLees" hidden aria-label="Voorlezen" aria-expanded="false">&#128264; Voorlezen</button>
+      <button class="kop-knop zicht-knop" id="btnZicht" hidden></button>
       <button class="kop-knop" id="btnOverzicht">Overzicht</button>
       <button class="kop-knop" id="btnIndex">Mijn woorden</button>
       <div class="weergave">

@@ -811,6 +811,19 @@ function tekenKop() {
       : S.scherm === 'reeks' ? esc((REEKSEN.find(x => x.id === S.reeks) || {}).naam || 'Overzicht')
       : 'Mijn woorden';
   }
+  /* knop Alle / Nieuw / Eerder: alleen waar de lestekst gelezen wordt */
+  const ZICHT_NAAM = { alle: 'Alle', nieuw: 'Nieuw', eerder: 'Eerder' };
+  const zichtTekst = { alle: 'Alle woorden gewoon', nieuw: 'Alleen nieuwe woorden donker', eerder: 'Eerder gezien donker, moeilijk rood' };
+  ['btnZicht', 'btnZichtMob'].forEach(id => {
+    const k = document.getElementById(id);
+    if (!k) return;
+    const z = WI.zicht || 'alle';
+    k.hidden = !(S.scherm === 'les' && (S.stap === 0 || S.stap === 5));
+    k.classList.toggle('aan', z !== 'alle');
+    k.innerHTML = '<b class="zicht-ic"></b><span class="zicht-t">' + ZICHT_NAAM[z] + '</span>';
+    k.title = zichtTekst[z] + ' (tik om te wisselen)';
+    k.setAttribute('aria-label', 'Weergave: ' + zichtTekst[z]);
+  });
   const ms = document.getElementById('btnStap');
   if (ms) {
     ms.hidden = S.scherm !== 'les';
@@ -967,9 +980,11 @@ function kaartVan(id, opt) {
   if (opt.merk !== undefined) {
     merk = opt.merk ? `<span class="merk ${kent ? 'g' : 'o'}">${esc(opt.merk)}</span>` : '';
   }
+  if (opt.labels !== undefined) merk = '';
   k.innerHTML = `<div class="mid">
       <div class="woord">${esc(e.lemma)}</div>
       <div class="bet">${merk}${esc(e.nl)}</div>
+      ${opt.labels ? `<div class="wlabs">${opt.labels}</div>` : ''}
     </div>`;
   k.onclick = ev => {
     if (ev.target.closest('.info')) return;
@@ -977,7 +992,7 @@ function kaartVan(id, opt) {
     bewaar(); teken();
   };
   /* Staat in het merkje al een ander boek, dan hoeft ⓘ niet ook nog te kleuren. */
-  const kleur = opt.merk !== undefined ? (elders.length && pl.length && pl[0].boek === S.boek) : elders.length;
+  const kleur = opt.labels !== undefined ? false : opt.merk !== undefined ? (elders.length && pl.length && pl[0].boek === S.boek) : elders.length;
   const i = el('button', 'info' + (kleur ? ' elders' : ''), 'ⓘ');
   i.setAttribute('aria-label', 'Details van ' + e.lemma);
   if (elders.length) i.title = 'Ook gezien in: ' + elders.map(p => p.label).join(' · ');
@@ -1052,31 +1067,59 @@ function tekenLijst(titel, sub, metActies) {
   const nGekend = alle.filter(i => S.gekend.has(i)).length;
   blad.appendChild(el('div', 'balk', `<i style="width:${Math.round(100 * nGekend / (alle.length || 1))}%"></i>`));
 
+  /* Eén lijst met alle woorden van de les. Bovenaan kies je wat je ziet:
+     Alle · Nieuw (voor het eerst in deze les) · Eerder gezien (eerder in dit
+     boek, of in een les van een ander boek die je gelezen hebt). Bij Eerder
+     gezien kun je nog filteren op Moeilijk (nog niet bekend) of Makkelijk
+     (bekend). Elk woord zegt in woorden wat het is; geen kleurcode. */
   const eerder = id => plekkenVan(id);
-  const isNieuw = id => !S.gekend.has(id) && !eerder(id).length;
+  const isEerder = id => eerder(id).length > 0;
   const per = f => ({ ism: ids.ism.filter(f), fil: ids.fil.filter(f), harf: ids.harf.filter(f) });
   const tel = g => g.ism.length + g.fil.length + g.harf.length;
-  const nieuw = per(isNieuw);
-  const herh = per(id => !isNieuw(id));
-  const nOranje = tel(per(id => !isNieuw(id) && !S.gekend.has(id)));
-  const nGroen = tel(per(id => S.gekend.has(id)));
+  const nAlle = alle.length, nNieuw = alle.filter(i => !isEerder(i)).length, nEerder = nAlle - nNieuw;
+  const eerderIds = alle.filter(isEerder);
+  const nMoei = eerderIds.filter(i => !S.gekend.has(i)).length, nMak = eerderIds.length - nMoei;
 
-  if (!S.wTab) S.wTab = 'nieuw';
-  const tabs = el('div', 'wtabs');
-  tabs.setAttribute('role', 'tablist');
-  const tab = (sleutel, naam, getallen) => {
-    const b = el('button', 'wtab' + (S.wTab === sleutel ? ' aan' : ''), `<span>${naam}</span>${getallen}`);
+  if (!['alle', 'nieuw', 'eerder'].includes(S.wTab)) S.wTab = 'alle';
+  if (!['alles', 'moeilijk', 'makkelijk'].includes(S.wFilter)) S.wFilter = 'alles';
+  const seg = el('div', 'wseg');
+  seg.setAttribute('role', 'tablist');
+  for (const [sleutel, naam, n] of [['alle', 'Alle', nAlle], ['nieuw', 'Nieuw', nNieuw], ['eerder', 'Eerder gezien', nEerder]]) {
+    const b = el('button', 'wseg-k' + (S.wTab === sleutel ? ' aan' : ''), `${naam}<em>${n}</em>`);
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-selected', S.wTab === sleutel);
     b.onclick = () => { S.wTab = sleutel; teken(); };
-    tabs.appendChild(b);
-  };
-  tab('nieuw', 'Nieuw', `<span class="wt-n" title="nieuwe woorden">${tel(nieuw)}</span>`);
-  tab('herh', 'Herhaling',
-    `<span class="wt-n o" title="eerder gezien, nog niet bekend">${nOranje}</span>` +
-    `<span class="wt-n g" title="bekend">${nGroen}</span>`);
-  blad.appendChild(tabs);
+    seg.appendChild(b);
+  }
+  blad.appendChild(seg);
+  if (S.wTab === 'eerder') {
+    const rij = el('div', 'wfilter', '<span class="wf-pijl">↳</span>');
+    for (const [sleutel, naam, n] of [['alles', 'Alles', nEerder], ['moeilijk', 'Moeilijk', nMoei], ['makkelijk', 'Makkelijk', nMak]]) {
+      const b = el('button', 'wf-k wf-' + sleutel + (S.wFilter === sleutel ? ' aan' : ''), `${naam} ${n}`);
+      b.setAttribute('aria-pressed', S.wFilter === sleutel);
+      b.onclick = () => { S.wFilter = sleutel; teken(); };
+      rij.appendChild(b);
+    }
+    blad.appendChild(rij);
+  }
 
+  const toon = id => {
+    if (S.wTab === 'nieuw') return !isEerder(id);
+    if (S.wTab === 'eerder') {
+      if (!isEerder(id)) return false;
+      if (S.wFilter === 'moeilijk') return !S.gekend.has(id);
+      if (S.wFilter === 'makkelijk') return S.gekend.has(id);
+    }
+    return true;
+  };
+  const labels = id => {
+    const pl = eerder(id);
+    const waar = pl.length
+      ? `<span class="wlab e">eerder · ${esc(pl[0].label)}</span>`
+      : (S.wTab === 'nieuw' ? '' : '<span class="wlab n">nieuw</span>');
+    const st = S.gekend.has(id) ? '<span class="wlab mak">makkelijk</span>' : '<span class="wlab moei">moeilijk</span>';
+    return waar + st;
+  };
   const blok = (groepen, kaart) => {
     const kol = el('div', 'kolommen');
     const cats = ['ism', 'fil', 'harf'].filter(c => groepen[c].length);
@@ -1094,30 +1137,12 @@ function tekenLijst(titel, sub, metActies) {
   };
 
   const wrap = el('div', 'wlijst');
-  if (S.wTab === 'nieuw') {
-    const b = blok(nieuw, id => kaartVan(id, { merk: '' }));
-    wrap.appendChild(b || el('p', 'wleeg', 'Geen nieuwe woorden in deze les.'));
-  } else {
-    const sch = el('div', 'schakels');
-    const schakel = (sleutel, tekst, uit) => {
-      const r = el('button', 'schakel' + (WI[sleutel] ? ' aan' : '') + (uit ? ' grijs' : ''),
-        `<span class="sw"><i></i></span><span>${tekst}</span>`);
-      r.setAttribute('role', 'switch');
-      r.setAttribute('aria-checked', !!WI[sleutel]);
-      r.onclick = () => { WI[sleutel] = !WI[sleutel]; bewaarWI(); teken(); };
-      sch.appendChild(r);
-    };
-    schakel('verberg', 'Bekende woorden verbergen');
-    schakel('markeer', 'Bekende woorden groen markeren', WI.verberg);
-    wrap.appendChild(sch);
-    const zicht = WI.verberg ? per(id => !isNieuw(id) && !S.gekend.has(id)) : herh;
-    const b = blok(zicht, id => {
-      const pl = eerder(id);
-      return kaartVan(id, { merk: pl.length ? pl[0].label : plekLabel(S.boek, S.les), markeer: WI.markeer });
-    });
-    wrap.appendChild(b || el('p', 'wleeg', WI.verberg && nGroen
-      ? 'Alle woorden die je eerder tegenkwam, ken je al.' : 'Nog geen woorden om te herhalen.'));
-  }
+  const b = blok(per(toon), id => kaartVan(id, { labels: labels(id) }));
+  const leeg = S.wTab === 'nieuw' ? 'Geen nieuwe woorden in deze les.'
+    : S.wTab === 'eerder' && S.wFilter === 'moeilijk' && nEerder ? 'Geen moeilijke woorden: alles wat je eerder zag, ken je al.'
+    : S.wTab === 'eerder' && S.wFilter === 'makkelijk' && nEerder ? 'Nog geen makkelijke woorden bij wat je eerder zag.'
+    : S.wTab === 'eerder' ? 'Geen woorden die je eerder bent tegengekomen.' : 'Geen woorden.';
+  wrap.appendChild(b || el('p', 'wleeg', leeg));
   blad.appendChild(wrap);
 
   if (metActies) blad.appendChild(metActies());
@@ -1220,10 +1245,20 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
          je nu aantikt kleurt amber. Geen grijs, want dat stuurt je oordeel.
          In de oefenteksten krijgen woorden die je nog niet kent een dun streepje;
          geleende woorden niet, die hebben hun eigen lijntje boven de betekenis. */
+      /* De knop Alle / Nieuw / Eerder in de bovenbalk (alleen bij het lezen):
+         bij Nieuw vervaagt wat je eerder zag, bij Eerder vervaagt het nieuwe en
+         wordt een eerder gezien woord dat je nog niet kent rood en vet. */
+      let zicht = '';
+      if (markeer && WI.zicht && WI.zicht !== 'alle') {
+        const echt = inhoud.filter(i => lem(i) && losStaand(i));
+        const nieuwW = echt.length > 0 && echt.some(i => !plekkenVan(i).length);
+        if (WI.zicht === 'nieuw') zicht = nieuwW ? '' : ' vaag';
+        else zicht = nieuwW ? ' vaag' : (echt.some(i => !S.gekend.has(i)) ? ' moei' : '');
+      }
       const s = el('span', 'w' +
         (markeer
           ? (aan ? ' onbekend' : '') + (lastig && !aan ? ' lastig' : '')
-          : (!gekend && !gl ? ' teleren' : '')) +
+          : (!gekend && !gl ? ' teleren' : '')) + zicht +
         (gl ? ' geleend' : '') +
         (w.k ? ' kw' : '') + (w.u ? ' ku' : ''));
       /* w.u is de schrijfwijze van de moshaf; w.w blijft de gewone spelling,
@@ -3468,7 +3503,7 @@ function tekenIndex() {
    in dezelfde les bent. */
 const PLEK = () => 'qirat.plek.' + (Opslag.gebruiker || 'los');
 const PLEK_VELDEN = ['ovModus', 'ov', 'paren', 'flits', 'zb', 'vv', 'losRonde', 'zin', 'open', 'klaar',
-                     'oefenIdx', 'vraag', 'antwoord', 'wTab'];
+                     'oefenIdx', 'vraag', 'antwoord', 'wTab', 'wFilter'];
 let plekKlaar = false, plekTijd = null;
 function bewaarPlek() {
   if (!plekKlaar) return;
@@ -3725,6 +3760,15 @@ document.getElementById('btnWis').onclick = async () => {
 
 document.getElementById('btnWie').onclick = () => toonInlog();
 if (document.getElementById('btnVoorstel')) document.getElementById('btnVoorstel').onclick = toonVoorstellen;
+['btnZicht', 'btnZichtMob'].forEach(id => {
+  const k = document.getElementById(id);
+  if (!k) return;
+  k.onclick = () => {
+    const volg = { alle: 'nieuw', nieuw: 'eerder', eerder: 'alle' };
+    WI.zicht = volg[WI.zicht || 'alle'];
+    bewaarWI(); teken();
+  };
+});
 ['btnLees', 'btnLeesMob'].forEach(id => {
   const k = document.getElementById(id);
   if (k) k.onclick = () => { Lees.open = !Lees.open; tekenLeesPaneel(); };
