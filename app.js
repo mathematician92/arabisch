@@ -812,8 +812,8 @@ function tekenKop() {
       : 'Mijn woorden';
   }
   /* knop Alle / Nieuw / Eerder: alleen waar de lestekst gelezen wordt */
-  const ZICHT_NAAM = { alle: 'Alle', nieuw: 'Nieuw', eerder: 'Eerder' };
-  const zichtTekst = { alle: 'Alle woorden gewoon', nieuw: 'Alleen nieuwe woorden donker', eerder: 'Eerder gezien donker, moeilijk rood' };
+  const ZICHT_NAAM = { alle: 'Alle', nieuw: 'Nieuw', eerder: 'Al gezien' };
+  const zichtTekst = { alle: 'Alle woorden gewoon', nieuw: 'Alleen nieuwe woorden donker', eerder: 'Al gezien donker, moeilijk rood' };
   ['btnZicht', 'btnZichtMob'].forEach(id => {
     const k = document.getElementById(id);
     if (!k) return;
@@ -1061,7 +1061,6 @@ function tekenLijst(titel, sub, metActies) {
   const blad = el('div', 'blad');
   const ids = { ism: [...sp.nieuw.ism, ...sp.oud.ism], fil: [...sp.nieuw.fil, ...sp.oud.fil], harf: [...sp.nieuw.harf, ...sp.oud.harf] };
   const alle = [...ids.ism, ...ids.fil, ...ids.harf];
-  blad.appendChild(el('h2', null, `${esc(titel)} <span class="h2-tel">· ${alle.length} unieke woorden</span>`));
   if (sub) blad.appendChild(el('p', 'sub', sub));
 
   const nGekend = alle.filter(i => S.gekend.has(i)).length;
@@ -1084,14 +1083,18 @@ function tekenLijst(titel, sub, metActies) {
   if (!['alles', 'moeilijk', 'makkelijk'].includes(S.wFilter)) S.wFilter = 'alles';
   const seg = el('div', 'wseg');
   seg.setAttribute('role', 'tablist');
-  for (const [sleutel, naam, n] of [['alle', 'Alle', nAlle], ['nieuw', 'Nieuw', nNieuw], ['eerder', 'Eerder gezien', nEerder]]) {
+  for (const [sleutel, naam, n] of [['alle', 'Alle', nAlle], ['nieuw', 'Nieuw', nNieuw], ['eerder', 'Al gezien', nEerder]]) {
     const b = el('button', 'wseg-k' + (S.wTab === sleutel ? ' aan' : ''), `${naam}<em>${n}</em>`);
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-selected', S.wTab === sleutel);
     b.onclick = () => { S.wTab = sleutel; teken(); };
     seg.appendChild(b);
   }
-  blad.appendChild(seg);
+  /* tabbladen en filter blijven onder de kop hangen: filteren kan ook als je
+     al ver naar beneden bent gescrold */
+  const wbalk = el('div', 'wbalk');
+  wbalk.appendChild(seg);
+  blad.appendChild(wbalk);
   if (S.wTab === 'eerder') {
     const rij = el('div', 'wfilter', '<span class="wf-pijl">↳</span>');
     for (const [sleutel, naam, n] of [['alles', 'Alles', nEerder], ['moeilijk', 'Moeilijk', nMoei], ['makkelijk', 'Makkelijk', nMak]]) {
@@ -1100,7 +1103,7 @@ function tekenLijst(titel, sub, metActies) {
       b.onclick = () => { S.wFilter = sleutel; teken(); };
       rij.appendChild(b);
     }
-    blad.appendChild(rij);
+    wbalk.appendChild(rij);
   }
 
   const toon = id => {
@@ -1115,7 +1118,7 @@ function tekenLijst(titel, sub, metActies) {
   const labels = id => {
     const pl = eerder(id);
     const waar = pl.length
-      ? `<span class="wlab e">eerder · ${esc(pl[0].label)}</span>`
+      ? `<span class="wlab e">al gezien · ${esc(pl[0].label)}</span>`
       : (S.wTab === 'nieuw' ? '' : '<span class="wlab n">nieuw</span>');
     /* Een nieuw woord krijgt pas moeilijk/makkelijk als je de les gelezen
        hebt: daarvoor heb je er nog niets over gezegd. */
