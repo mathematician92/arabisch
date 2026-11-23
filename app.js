@@ -1238,7 +1238,6 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
       /* voor- en achtervoegsels tellen niet mee: die 'ken' je nooit los */
       const gekend = inhoud.length && inhoud.every(i => S.gekend.has(i));
       const aan = markeer && inhoud.some(i => S.geklikt.has(i));
-      const lastig = inhoud.some(i => S.moeilijk.has(i));
       /* woord van buiten deze les: betekenis er meteen onder */
       const gl = nieuwSet ? w.ids.map(i => lem(i)).find(e => e && nieuwSet.has(e.id)) : null;
       /* Stap 1 en 6 zijn een frisse lezing: de tekst staat er neutraal, alleen wat
@@ -1249,15 +1248,18 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
          bij Nieuw vervaagt wat je eerder zag, bij Eerder vervaagt het nieuwe en
          wordt een eerder gezien woord dat je nog niet kent rood en vet. */
       let zicht = '';
+      /* moeilijk = eerder gezien en nog niet bekend: overal dezelfde betekenis
+         (woordenlijst, knop Eerder, en de rode lijn onder het woord) */
+      const echt = markeer ? inhoud.filter(i => lem(i) && losStaand(i)) : [];
+      const nieuwW = echt.length > 0 && echt.some(i => !plekkenVan(i).length);
+      const moeiW = markeer && echt.length > 0 && !nieuwW && echt.some(i => !S.gekend.has(i));
       if (markeer && WI.zicht && WI.zicht !== 'alle') {
-        const echt = inhoud.filter(i => lem(i) && losStaand(i));
-        const nieuwW = echt.length > 0 && echt.some(i => !plekkenVan(i).length);
         if (WI.zicht === 'nieuw') zicht = nieuwW ? '' : ' vaag';
-        else zicht = nieuwW ? ' vaag' : (echt.some(i => !S.gekend.has(i)) ? ' moei' : '');
+        else zicht = nieuwW ? ' vaag' : (moeiW ? ' moei' : '');
       }
       const s = el('span', 'w' +
         (markeer
-          ? (aan ? ' onbekend' : '') + (lastig && !aan ? ' lastig' : '')
+          ? (aan ? ' onbekend' : '') + (moeiW && !aan ? ' lastig' : '')
           : (!gekend && !gl ? ' teleren' : '')) + zicht +
         (gl ? ' geleend' : '') +
         (w.k ? ' kw' : '') + (w.u ? ' ku' : ''));
