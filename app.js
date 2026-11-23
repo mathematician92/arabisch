@@ -982,7 +982,7 @@ function kaartVan(id, opt) {
   }
   if (opt.labels !== undefined) merk = '';
   k.innerHTML = `<div class="mid">
-      <div class="woord">${esc(e.lemma)}</div>
+      <div class="woord">${esc(e.lemma)}${opt.labels !== undefined && e.cat === 'fil' && e.mudari ? `<span class="mudari">${esc(e.mudari)}</span>` : ''}</div>
       <div class="bet">${merk}${esc(e.nl)}</div>
       ${opt.labels ? `<div class="wlabs">${opt.labels}</div>` : ''}
     </div>`;
