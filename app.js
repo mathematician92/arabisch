@@ -643,15 +643,17 @@ const REEKSEN = [
     boeken: ['baynaeen', 'baynaeen2', 'baynatwee', 'baynatwee2', 'baynadrie', 'baynadrie2', 'baynavier', 'baynavier2'] },
   { id: 'lees', naam: 'Leesboeken', ar: 'قصص النبيين · القراءة الراشدة',
     boeken: ['qasas', 'qirat'] },
+  { id: 'nash', naam: 'Al-ʿArabiyya li-n-Nāshiʾīn', ar: 'العربية للناشئين',
+    boeken: ['nashieen', 'nashieen2', 'nashieen3'] },
 ];
 const reeksVan = boek => REEKSEN.find(r => r.boeken.includes(boek)) || null;
 /* Bayna: de kleur van de omslag (boek 4 wordt rood, #B5372F). Qirāʾa en Qaṣaṣ
    krijgen een kleur die op geen van die vier lijkt: paars en turkoois. */
 const BOEK_KLEUR = { baynaeen: '#D5893D', baynaeen2: '#D5893D', bayna: '#D5893D', baynatwee: '#7C984E', baynatwee2: '#7C984E',
                      baynadrie: '#3F6B98', baynadrie2: '#3F6B98', baynavier: '#B5372F', baynavier2: '#B5372F',
-                     qirat: '#7D4FA6', qasas: '#17969C' };
+                     qirat: '#7D4FA6', qasas: '#17969C', nashieen: '#C2577F', nashieen2: '#C2577F', nashieen3: '#C2577F' };
 const BOEK_KORT = { baynaeen: 'ABY B1D1', baynaeen2: 'ABY B1D2', bayna: 'ABY B1X', baynatwee: 'ABY B2D1', baynatwee2: 'ABY B2D2',
-                    baynadrie: 'ABY B3D1', baynadrie2: 'ABY B3D2', baynavier: 'ABY B4D1', baynavier2: 'ABY B4D2', qasas: 'Qaṣaṣ', qirat: 'Qirāʾa' };
+                    baynadrie: 'ABY B3D1', baynadrie2: 'ABY B3D2', baynavier: 'ABY B4D1', baynavier2: 'ABY B4D2', qasas: 'Qaṣaṣ', qirat: 'Qirāʾa', nashieen: 'Nāsh. B1', nashieen2: 'Nāsh. B2', nashieen3: 'Nāsh. B3' };
 
 /* Waar een woord staat, kort: in het eigen boek 'les 5' of 'H2 les 1',
    uit een ander boek 'ABY B2D1L2', 'Qaṣaṣ H2L1' of 'Qirāʾa L5'. */
@@ -1462,6 +1464,7 @@ function tekenLeesPaneel() {
   pan.appendChild(balk);
   meetKop();
 }
+
 
 /* ---------- Opname uit het boek: afspelen en meekleuren ----------
    Per les kan er in data/audio/ een opname staan (<boek>-<les>.mp3) met de
