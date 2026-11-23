@@ -1117,6 +1117,9 @@ function tekenLijst(titel, sub, metActies) {
     const waar = pl.length
       ? `<span class="wlab e">eerder · ${esc(pl[0].label)}</span>`
       : (S.wTab === 'nieuw' ? '' : '<span class="wlab n">nieuw</span>');
+    /* Een nieuw woord krijgt pas moeilijk/makkelijk als je de les gelezen
+       hebt: daarvoor heb je er nog niets over gezegd. */
+    if (!pl.length && !S.gelezen.has(lesSleutel())) return waar;
     const st = S.gekend.has(id) ? '<span class="wlab mak">makkelijk</span>' : '<span class="wlab moei">moeilijk</span>';
     return waar + st;
   };
