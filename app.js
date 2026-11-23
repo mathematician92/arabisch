@@ -813,14 +813,18 @@ function tekenKop() {
   }
   /* knop Alle / Nieuw / Eerder: alleen waar de lestekst gelezen wordt */
   const ZICHT_NAAM = { alle: 'Alle', nieuw: 'Nieuw', eerder: 'Al gezien' };
-  const zichtTekst = { alle: 'Alle woorden gewoon', nieuw: 'Alleen nieuwe woorden donker', eerder: 'Al gezien donker, moeilijk rood' };
+  const zichtTekst = { alle: 'Alle woorden gewoon', nieuw: 'Nieuwe woorden blauw', eerder: 'Al gezien: bekend groen, moeilijk rood' };
   ['btnZicht', 'btnZichtMob'].forEach(id => {
     const k = document.getElementById(id);
     if (!k) return;
     const z = WI.zicht || 'alle';
     k.hidden = !(S.scherm === 'les' && (S.stap === 0 || S.stap === 5));
-    k.classList.toggle('aan', z !== 'alle');
-    k.innerHTML = '<b class="zicht-ic"></b><span class="zicht-t">' + ZICHT_NAAM[z] + '</span>';
+    k.classList.toggle('z-nieuw', z === 'nieuw');
+    k.classList.toggle('z-eerder', z === 'eerder');
+    /* drie stipjes: er zijn drie standen, het dichte stipje is waar je zit */
+    const stip = ['alle', 'nieuw', 'eerder'].map(x => '<i' + (x === z ? ' class="op"' : '') + '></i>').join('');
+    k.innerHTML = (z === 'eerder' ? '' : '<b class="zicht-ic"></b>') + '<span class="zicht-t">' + ZICHT_NAAM[z] +
+      '</span><span class="zicht-st">' + stip + '</span>';
     k.title = zichtTekst[z] + ' (tik om te wisselen)';
     k.setAttribute('aria-label', 'Weergave: ' + zichtTekst[z]);
   });
@@ -1260,12 +1264,14 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
       const nieuwW = echt.length > 0 && echt.some(i => !plekkenVan(i).length);
       const moeiW = markeer && echt.length > 0 && !nieuwW && echt.some(i => !S.gekend.has(i));
       if (markeer && WI.zicht && WI.zicht !== 'alle') {
-        if (WI.zicht === 'nieuw') zicht = nieuwW ? '' : ' vaag';
-        else zicht = nieuwW ? ' vaag' : (moeiW ? ' moei' : '');
+        /* Nieuw: nieuwe woorden blauw, de rest vaag. Al gezien: het nieuwe
+           vaag, moeilijk rood en vet, wat je al kent groen. */
+        if (WI.zicht === 'nieuw') zicht = nieuwW ? ' zn' : ' vaag';
+        else zicht = nieuwW ? ' vaag' : (moeiW ? ' moei' : (echt.length ? ' zm' : ''));
       }
       const s = el('span', 'w' +
         (markeer
-          ? (aan ? ' onbekend' : '') + (moeiW && !aan ? ' lastig' : '')
+          ? (aan ? ' onbekend' : '') + (moeiW && !aan && WI.zicht !== 'nieuw' ? ' lastig' : '')
           : (!gekend && !gl ? ' teleren' : '')) + zicht +
         (gl ? ' geleend' : '') +
         (w.k ? ' kw' : '') + (w.u ? ' ku' : ''));

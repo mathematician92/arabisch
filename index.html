@@ -223,7 +223,17 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 36px}
 .zicht-knop[hidden]{display:none}
 .zicht-ic{display:inline-block;width:11px;height:11px;border-radius:50%;border:1.5px solid currentColor;
   background:linear-gradient(90deg,currentColor 50%,transparent 50%);flex:0 0 auto}
-.zicht-knop.aan{border-color:var(--nieuw);color:var(--nieuw);background:color-mix(in srgb,var(--nieuw) 9%,var(--card))}
+.zicht-knop{box-shadow:0 2px 0 var(--line)}
+.zicht-knop.z-nieuw{border-color:var(--nieuw);color:var(--ink);font-weight:600;background:color-mix(in srgb,var(--nieuw) 42%,var(--card))}
+.zicht-knop.z-nieuw .zicht-ic{color:var(--nieuw)}
+.zicht-knop.z-eerder{border:1px solid transparent;color:var(--ink);font-weight:600;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--moei) 42%,var(--card)) 0 50%,color-mix(in srgb,var(--groen) 42%,var(--card)) 50% 100%) padding-box,
+  linear-gradient(135deg,var(--moei) 0 50%,var(--groen) 50% 100%) border-box}
+.zicht-st{display:inline-flex;gap:3px;margin-left:2px}
+.zicht-st i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.28}
+.zicht-st i.op{opacity:1}
+.tekst .w.zn{color:var(--nieuw)}
+.tekst .w.zm{color:var(--groen)}
 .mob-zicht{display:none}
 .tekst .w.vaag{color:color-mix(in srgb,var(--ink) 28%,var(--card))}
 .tekst .w.moei{color:var(--moei);font-weight:700}
