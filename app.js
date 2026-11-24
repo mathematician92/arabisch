@@ -691,6 +691,21 @@ function plekkenVan(id) {
     .map(([boek, nr]) => ({ boek, nr, label: plekLabel(boek, nr) }));
 }
 
+/* Moeilijk = nog niet bekend én je hebt het woord echt al eens gelezen: in
+   deze les (na Klaar met lezen) of in een andere les die je gelezen of
+   afgerond hebt. Een woord uit een eerdere les die je oversloeg is wel
+   'al gezien', maar nog niet moeilijk en niet makkelijk. */
+function gelezenErgens(id) {
+  const e = lem(id);
+  if (!e || !e.komt) return false;
+  return e.komt.some(s => S.gelezen.has(s) || S.afgerond.has(s));
+}
+function isMoeilijk(id) {
+  if (S.gekend.has(id)) return false;
+  const hier = lesSleutel();
+  return S.gelezen.has(hier) || S.afgerond.has(hier) || gelezenErgens(id);
+}
+
 /* ---------------- kop + stappen ---------------- */
 function tekenKop() {
   const naarLes = nr => gaNaar(S.boek, nr);
@@ -1073,7 +1088,7 @@ function tekenLijst(titel, sub, metActies) {
   /* Eén lijst met alle woorden van de les. Bovenaan kies je wat je ziet:
      Alle · Nieuw (voor het eerst in deze les) · Eerder gezien (eerder in dit
      boek, of in een les van een ander boek die je gelezen hebt). Bij Eerder
-     gezien kun je nog filteren op Moeilijk (nog niet bekend) of Makkelijk
+     gezien kun je nog filteren op Moeilijk (nog niet bekend en al eens gelezen) of Makkelijk
      (bekend). Elk woord zegt in woorden wat het is; geen kleurcode. */
   const eerder = id => plekkenVan(id);
   const isEerder = id => eerder(id).length > 0;
@@ -1081,7 +1096,7 @@ function tekenLijst(titel, sub, metActies) {
   const tel = g => g.ism.length + g.fil.length + g.harf.length;
   const nAlle = alle.length, nNieuw = alle.filter(i => !isEerder(i)).length, nEerder = nAlle - nNieuw;
   const eerderIds = alle.filter(isEerder);
-  const nMoei = eerderIds.filter(i => !S.gekend.has(i)).length, nMak = eerderIds.length - nMoei;
+  const nMoei = eerderIds.filter(isMoeilijk).length, nMak = eerderIds.filter(i => S.gekend.has(i)).length;
 
   if (!['alle', 'nieuw', 'eerder'].includes(S.wTab)) S.wTab = 'alle';
   if (!['alles', 'moeilijk', 'makkelijk'].includes(S.wFilter)) S.wFilter = 'alles';
@@ -1114,7 +1129,7 @@ function tekenLijst(titel, sub, metActies) {
     if (S.wTab === 'nieuw') return !isEerder(id);
     if (S.wTab === 'eerder') {
       if (!isEerder(id)) return false;
-      if (S.wFilter === 'moeilijk') return !S.gekend.has(id);
+      if (S.wFilter === 'moeilijk') return isMoeilijk(id);
       if (S.wFilter === 'makkelijk') return S.gekend.has(id);
     }
     return true;
@@ -1127,7 +1142,8 @@ function tekenLijst(titel, sub, metActies) {
     /* Een nieuw woord krijgt pas moeilijk/makkelijk als je de les gelezen
        hebt: daarvoor heb je er nog niets over gezegd. */
     if (!pl.length && !S.gelezen.has(lesSleutel())) return waar;
-    const st = S.gekend.has(id) ? '<span class="wlab mak">makkelijk</span>' : '<span class="wlab moei">moeilijk</span>';
+    const st = S.gekend.has(id) ? '<span class="wlab mak">makkelijk</span>'
+      : isMoeilijk(id) ? '<span class="wlab moei">moeilijk</span>' : '';
     return waar + st;
   };
   const blok = (groepen, kaart) => {
@@ -1149,7 +1165,7 @@ function tekenLijst(titel, sub, metActies) {
   const wrap = el('div', 'wlijst');
   const b = blok(per(toon), id => kaartVan(id, { labels: labels(id) }));
   const leeg = S.wTab === 'nieuw' ? 'Geen nieuwe woorden in deze les.'
-    : S.wTab === 'eerder' && S.wFilter === 'moeilijk' && nEerder ? 'Geen moeilijke woorden: alles wat je eerder zag, ken je al.'
+    : S.wTab === 'eerder' && S.wFilter === 'moeilijk' && nEerder ? (nMak === nEerder ? 'Geen moeilijke woorden: alles wat je eerder zag, ken je al.' : 'Geen moeilijke woorden. Woorden uit lessen die je nog niet gelezen hebt, tellen pas mee als je ze gelezen hebt.')
     : S.wTab === 'eerder' && S.wFilter === 'makkelijk' && nEerder ? 'Nog geen makkelijke woorden bij wat je eerder zag.'
     : S.wTab === 'eerder' ? 'Geen woorden die je eerder bent tegengekomen.' : 'Geen woorden.';
   wrap.appendChild(b || el('p', 'wleeg', leeg));
@@ -1262,12 +1278,13 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
          (woordenlijst, knop Eerder, en de rode lijn onder het woord) */
       const echt = markeer ? inhoud.filter(i => lem(i) && losStaand(i)) : [];
       const nieuwW = echt.length > 0 && echt.some(i => !plekkenVan(i).length);
-      const moeiW = markeer && echt.length > 0 && !nieuwW && echt.some(i => !S.gekend.has(i));
+      const moeiW = markeer && echt.length > 0 && !nieuwW && echt.some(isMoeilijk);
+      const makW = echt.length > 0 && echt.every(i => S.gekend.has(i));
       if (markeer && WI.zicht && WI.zicht !== 'alle') {
         /* Nieuw: nieuwe woorden blauw, de rest vaag. Al gezien: het nieuwe
            vaag, moeilijk rood en vet, wat je al kent groen. */
         if (WI.zicht === 'nieuw') zicht = nieuwW ? ' zn' : ' vaag';
-        else zicht = nieuwW ? ' vaag' : (moeiW ? ' moei' : (echt.length ? ' zm' : ''));
+        else zicht = nieuwW ? ' vaag' : (moeiW ? ' moei' : (makW ? ' zm' : ''));
       }
       const s = el('span', 'w' +
         (markeer
