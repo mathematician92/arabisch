@@ -561,6 +561,8 @@ function eerdereLes(id, tot) {
   let vroegste = null;
   for (const s of e.komt) {
     const [boek, nr] = [s.slice(0, s.lastIndexOf('-')), Number(s.slice(s.lastIndexOf('-') + 1))];
+    /* een eerder deel van Bayna Yadayk of Nāshiʾīn telt als les 0 */
+    if (eerderDeel(boek)) { if (vroegste === null) vroegste = 0; continue; }
     if (boek !== S.boek || nr >= tot) continue;
     if (vroegste === null || nr < vroegste) vroegste = nr;
   }
@@ -670,8 +672,21 @@ function plekLabel(boek, nr) {
   return aby ? kort + plek : kort + ' ' + plek;
 }
 
+/* Bayna Yadayk en Nāshiʾīn zijn in de app losse delen, maar lees je ze als
+   één doorlopend boek, net als Qasas: alles uit een eerder deel van dezelfde
+   reeks geldt als al gezien, ook als je die lessen niet gemarkeerd hebt. De
+   leesboeken (Qasas, Qirāʾa) blijven los van elkaar. */
+const DOORLOPEND = new Set(['aby', 'nash']);
+function eerderDeel(boek) {
+  if (boek === S.boek) return false;
+  const r = reeksVan(S.boek);
+  if (!r || !DOORLOPEND.has(r.id) || !r.boeken.includes(boek)) return false;
+  return r.boeken.indexOf(boek) < r.boeken.indexOf(S.boek);
+}
+
 /* Waar je een woord al eerder bent tegengekomen: in dit boek elke eerdere
-   les; in een ander boek alleen lessen die je gelezen of afgerond hebt.
+   les, en elke les van een eerder deel van dezelfde reeks (zie eerderDeel);
+   in een ander boek alleen lessen die je gelezen of afgerond hebt.
    Per boek de eerste les. Volgorde: dit boek, dan de eigen reeks, dan de
    andere reeks. */
 function plekkenVan(id) {
@@ -680,7 +695,7 @@ function plekkenVan(id) {
   const per = new Map();
   for (const s of e.komt) {
     const i = s.lastIndexOf('-'), boek = s.slice(0, i), nr = Number(s.slice(i + 1));
-    if (boek === S.boek ? nr >= S.les : !(S.gelezen.has(s) || S.afgerond.has(s))) continue;
+    if (boek === S.boek ? nr >= S.les : !(eerderDeel(boek) || S.gelezen.has(s) || S.afgerond.has(s))) continue;
     if (!per.has(boek) || nr < per.get(boek)) per.set(boek, nr);
   }
   const eigen = reeksVan(S.boek);
@@ -993,8 +1008,9 @@ function kaartVan(id, opt) {
      staat daaronder in welke boeken. Zo zie je meteen: nieuw in dit boek,
      maar al eens gehad. */
   const pl = plekkenVan(id);
-  const hier = pl.find(p => p.boek === S.boek);
-  const elders = pl.filter(p => p.boek !== S.boek);
+  /* een eerder deel van dezelfde reeks telt als 'dit boek' */
+  const hier = pl.find(p => p.boek === S.boek || eerderDeel(p.boek));
+  const elders = pl.filter(p => p.boek !== S.boek && !eerderDeel(p.boek));
   let merk = hier ? `<span class="merk">${esc(hier.label)}</span>` : '';
   if (opt.merk !== undefined) {
     merk = opt.merk ? `<span class="merk ${kent ? 'g' : 'o'}">${esc(opt.merk)}</span>` : '';
@@ -1225,6 +1241,9 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
   const blad = el('div', 'blad');
   if (sub) blad.appendChild(el('p', 'sub', sub));
   const t = el('div', 'tekst');
+  /* Bij Nieuw en Al gezien vervaagt ook alles wat geen woord is: leestekens,
+     haken, versnummers, vindplaatsen en getallen. Bij Alle blijft het zoals het is. */
+  if (markeer && WI.zicht && WI.zicht !== 'alle') t.classList.add('zicht-vaag');
   /* Het boek op het element zetten, zodat de opmaak per boek kan verschillen:
      elk leerboek heeft zijn eigen letterbeeld en dat mag de app volgen. */
   t.dataset.boek = S.boek;
@@ -1333,9 +1352,9 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
       } else if (w.hv || w.hn) {
         /* ronde haakjes en aanhalingstekens uit het boek blijven aan het woord vast */
         const slot = el('span', 'vers-eind');
-        if (w.hv) slot.appendChild(document.createTextNode(w.hv));
+        if (w.hv) slot.appendChild(el('span', 'hk', esc(w.hv)));
         slot.appendChild(s);
-        if (w.hn) slot.appendChild(document.createTextNode(w.hn));
+        if (w.hn) slot.appendChild(el('span', 'hk', esc(w.hn)));
         span.appendChild(slot);
       } else {
         span.appendChild(s);
