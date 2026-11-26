@@ -1455,33 +1455,45 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
 
 /* ---------------- prentenboek ----------------
    Een les met plaatjes (L.prent, uit q/prent.json via voeg_prent.py) kan bij het
-   lezen als prentenboek: per scène een plaatje met de zinnen eronder, en
-   bladeren met vegen of de knoppen. De zinnen zelf komen gewoon uit tekenTekst,
-   dus aantikken, Nieuw / Al gezien, voorlezen en opnames werken precies zoals
-   in de gewone tekst: we verdelen alleen de zinnen over de bladzijden. */
+   lezen als prentenboek op het volle scherm: per scène een plaatje met de
+   zinnen eronder, bladeren met vegen of de knoppen, en aan het eind een
+   slotbladzijde. De zinnen zelf komen gewoon uit tekenTekst, dus aantikken,
+   het woordpaneel, Nieuw / Al gezien en voorlezen werken precies zoals in de
+   gewone tekst: we verdelen alleen de zinnen over de bladzijden.
+   Op het volle scherm blijft van de kopbalk alleen ☰ over (het gewone menu,
+   met daarin ook Alle / Nieuw / Al gezien en Voorlezen) en rechts ✕, terug
+   naar alleen tekst. */
 const prentKan = L => !window.__DATA__ && Array.isArray(L.prent) && L.prent.length > 0;
+const prentAan = L => prentKan(L) && WI.prent === true;
 function prentSchakel() {
-  const r = el('div', 'prent-schakel');
-  [['Prentenboek', true], ['Alleen tekst', false]].forEach(([t, v]) => {
-    const b = el('button', (WI.prent !== false) === v ? 'op' : '', t);
-    b.onclick = () => { WI.prent = v; bewaarWI(); teken(); };
-    r.appendChild(b);
-  });
-  return r;
+  const b = el('button', 'prent-open', '&#128214; Lees als prentenboek');
+  b.onclick = () => { WI.prent = true; bewaarWI(); teken(); window.scrollTo(0, 0); };
+  return b;
+}
+function prentDicht() {
+  WI.prent = false; bewaarWI(); sluitMenus(); teken(); window.scrollTo(0, 0);
 }
 /* onthoud de bladzijde: na een tik op een woord wordt het scherm opnieuw getekend */
 const PRENT_BLAD = {};
-function maakPrent(blad, scenes) {
+/* klaar = { tel: tekst over aangetikte woorden, verder: knop-actie, wis: actie of null } */
+function maakPrent(blad, scenes, klaar) {
   const sleutel = lesSleutel();
   const t = blad.querySelector('.tekst');
   if (!t) return;
+  blad.classList.add('prent-blad');
   t.classList.add('prent');
+  document.body.classList.add('prent-vol');
   const boek = el('div', 'prent-boek');
+  /* titel bovenin het plaatje, met een eigen achtergrond (de woorden blijven aantikbaar) */
+  const kop = el('div', 'prent-kop');
+  const titel = t.querySelector(':scope > .tekst-titel');
+  if (titel) kop.appendChild(titel);
+  const bladen = el('div', 'prent-bladen');
   const bladz = scenes.map((sc, i) => {
     const b = el('div', 'prent-scene');
     const p = el('div', 'prent-plaat');
     const img = el('img');
-    img.src = 'data/plaatjes/' + sc.plaat; img.alt = ''; img.loading = i ? 'lazy' : 'eager';
+    img.src = 'data/plaatjes/' + sc.plaat; img.alt = '';
     p.appendChild(img);
     const tx = el('div', 'prent-tekst');
     for (let z = sc.van; z <= sc.tot; z++) {
@@ -1493,30 +1505,53 @@ function maakPrent(blad, scenes) {
       tx.appendChild(sp); tx.appendChild(document.createTextNode(' '));
     }
     b.appendChild(p); b.appendChild(tx);
-    boek.appendChild(b);
+    bladen.appendChild(b);
     return b;
   });
-  /* zinnen die in geen enkele scène vallen, blijven als gewone tekst onder het boek */
-  const rest = [...t.querySelectorAll(':scope > .zin, :scope > br')];
-  t.insertBefore(boek, t.querySelector(':scope > .zin, :scope > br') || null);
+  /* slotbladzijde: het plaatje van het begin, en dan door naar de woorden */
+  const slot = el('div', 'prent-scene prent-slot');
+  const si = el('img'); si.src = 'data/plaatjes/' + scenes[0].plaat; si.alt = '';
+  slot.appendChild(si);
+  const st = el('div', 'prent-slot-titel'); st.textContent = titel ? titel.textContent : '';
+  slot.appendChild(st);
+  slot.appendChild(el('p', '', 'Je hebt het verhaal gelezen.<br>Nu de woorden van deze les.'));
+  slot.appendChild(el('div', 'prent-slot-tel', esc(klaar.tel)));
+  const verder = el('button', 'knop', 'Naar de woordenlijst →');
+  verder.onclick = () => { document.body.classList.remove('prent-vol'); klaar.verder(); };
+  slot.appendChild(verder);
+  if (klaar.wis) { const w = el('button', 'prent-wis', 'Aangetikte woorden wissen'); w.onclick = klaar.wis; slot.appendChild(w); }
+  bladen.appendChild(slot);
+  boek.appendChild(kop);
+  boek.appendChild(bladen);
+
   const nav = el('div', 'prent-nav');
   const vorige = el('button', 'knop zacht', '← Vorige');
+  const mid = el('div', 'prent-midden');
   const stip = el('div', 'prent-stip');
   bladz.forEach(() => stip.appendChild(el('i')));
+  const nr = el('div', 'prent-nr');
+  mid.appendChild(stip); mid.appendChild(nr);
   const volgende = el('button', 'knop', 'Volgende →');
-  nav.appendChild(vorige); nav.appendChild(stip); nav.appendChild(volgende);
+  nav.appendChild(vorige); nav.appendChild(mid); nav.appendChild(volgende);
   boek.appendChild(nav);
+  /* zinnen die in geen enkele scène vallen (hoort niet voor te komen) */
+  const rest = [...t.querySelectorAll(':scope > .zin, :scope > br')];
+  t.insertBefore(boek, t.firstChild);
   if (rest.length) { const r = el('div', 'prent-rest'); rest.forEach(x => r.appendChild(x)); t.appendChild(r); }
+
+  const alle = [...bladz, slot], n = bladz.length;
   let nu = -1;
   const zet = i => {
-    i = Math.max(0, Math.min(bladz.length - 1, i));
+    i = Math.max(0, Math.min(n, i));
     if (i === nu) return;
     nu = i; PRENT_BLAD[sleutel] = i;
-    bladz.forEach((b, j) => b.classList.toggle('op', j === i));
+    alle.forEach((b, j) => b.classList.toggle('op', j === i));
     [...stip.children].forEach((d, j) => d.classList.toggle('op', j === i));
+    boek.classList.toggle('einde', i === n);
+    nr.textContent = i < n ? (i + 1) + '/' + n : '';
     vorige.disabled = i === 0;
-    volgende.disabled = i === bladz.length - 1;
-    volgende.textContent = i === bladz.length - 1 ? 'Einde' : 'Volgende →';
+    volgende.style.visibility = i === n ? 'hidden' : '';
+    volgende.textContent = i === n - 1 ? 'Einde →' : 'Volgende →';
   };
   vorige.onclick = () => zet(nu - 1);
   volgende.onclick = () => zet(nu + 1);
@@ -1533,11 +1568,32 @@ function maakPrent(blad, scenes) {
   /* Voorlezen of een opname loopt door de hele tekst: sla mee om naar de
      bladzijde met de zin die nu klinkt. */
   new MutationObserver(() => {
-    const k = t.querySelector('.zin.klinkt, .w.klinkt, .w.speelt');
+    const k = t.querySelector('.zin.klinkt, .w.klinkt, .w.speelt, .w.klinkt-nu');
     if (!k) return;
     const j = bladz.findIndex(b => b.contains(k));
     if (j >= 0) zet(j);
   }).observe(t, { subtree: true, attributes: true, attributeFilter: ['class'] });
+
+  /* Alles past altijd op het scherm, zonder scrollen: de tekst krijgt hoogstens
+     de helft van de ruimte (de letters worden zo nodig kleiner) en het plaatje
+     vult de rest. We meten de langste bladzijde, zodat de lettergrootte bij
+     het bladeren niet verspringt. */
+  const pas = () => {
+    if (!boek.isConnected) { removeEventListener('resize', pas); return; }
+    const ruimte = bladen.clientHeight;
+    if (!ruimte) return;
+    const breed = Math.min(boek.clientWidth, 640);
+    let f = Math.min(30, Math.max(22, breed * 0.062)) * (S.zoom || 1);
+    bladz.forEach(b => b.classList.add('meet'));
+    const hoogste = () => Math.max(...bladz.map(b => b.querySelector('.prent-tekst').offsetHeight));
+    boek.style.setProperty('--pf', f + 'px');
+    while (f > 14 && hoogste() > ruimte * 0.5) { f -= 1; boek.style.setProperty('--pf', f + 'px'); }
+    bladz.forEach(b => b.classList.remove('meet'));
+  };
+  addEventListener('resize', pas);
+  requestAnimationFrame(pas);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(pas);
+
   /* opnieuw getekend (na een tik)? dan zonder inloop-animatie */
   if (sleutel in PRENT_BLAD) {
     boek.classList.add('stil');
@@ -3691,6 +3747,7 @@ function teken() {
   document.documentElement.style.setProperty('--boek', bk || 'transparent');
   const m = document.getElementById('main');
   m.innerHTML = '';
+  document.body.classList.remove('prent-vol');
 
   /* Mijn woorden staat naast de lessen, niet erin: geen les nodig */
   if (S.scherm === 'lijst') { m.appendChild(tekenIndex()); return; }
@@ -3706,19 +3763,10 @@ function teken() {
   if (S.stap === 0) {
     const blad = tekenTekst(L.zinnen, lesKern(L.titel),
 '', true);
-    if (prentKan(L)) {
-      m.appendChild(prentSchakel());
-      if (WI.prent !== false) maakPrent(blad, L.prent);
-    }
-    const tel = el('div', 'balk-tekst');
-    tel.style.marginTop = '16px';
-    tel.textContent = S.geklikt.size
+    const telTekst = S.geklikt.size
       ? `${S.geklikt.size} ${S.geklikt.size === 1 ? 'woord' : 'woorden'} aangetikt als onbekend.`
       : 'Nog niets aangetikt.';
-    blad.appendChild(tel);
-    const a = el('div', 'acties');
-    const b = el('button', 'knop', 'Klaar met lezen');
-    b.onclick = () => {
+    const klaarMetLezen = () => {
       for (const id of sp.alle) {
         if (S.geklikt.has(id)) S.gekend.delete(id);
         else { S.gekend.add(id); S.moeilijk.delete(id); }
@@ -3726,14 +3774,29 @@ function teken() {
       S.gelezen.add(lesSleutel()); S.geklikt = new Set(); S.stap = 1;
       bewaar(); teken(); window.scrollTo(0, 0);
     };
-    a.appendChild(b);
-    if (S.geklikt.size) {
-      const w = el('button', 'knop zacht', 'Alles wissen');
-      w.onclick = () => { S.geklikt = new Set(); bewaar(); teken(); };
-      a.appendChild(w);
+    const wisAlles = () => { S.geklikt = new Set(); bewaar(); teken(); };
+    if (prentAan(L)) {
+      /* prentenboek: de slotbladzijde neemt 'Klaar met lezen' over */
+      maakPrent(blad, L.prent, { tel: telTekst, verder: klaarMetLezen, wis: S.geklikt.size ? wisAlles : null });
+      m.appendChild(blad);
+    } else {
+      if (prentKan(L)) m.appendChild(prentSchakel());
+      const tel = el('div', 'balk-tekst');
+      tel.style.marginTop = '16px';
+      tel.textContent = telTekst;
+      blad.appendChild(tel);
+      const a = el('div', 'acties');
+      const b = el('button', 'knop', 'Klaar met lezen');
+      b.onclick = klaarMetLezen;
+      a.appendChild(b);
+      if (S.geklikt.size) {
+        const w = el('button', 'knop zacht', 'Alles wissen');
+        w.onclick = wisAlles;
+        a.appendChild(w);
+      }
+      blad.appendChild(a);
+      m.appendChild(blad);
     }
-    blad.appendChild(a);
-    m.appendChild(blad);
   }
 
   /* ---- stap 2: woordenlijst ---- */
@@ -3921,6 +3984,7 @@ if (document.getElementById('btnVoorstel')) document.getElementById('btnVoorstel
   if (k) k.onclick = () => { Lees.open = !Lees.open; tekenLeesPaneel(); };
 });
 document.getElementById('btnMenu').onclick = () => wisselMenu('menu-open');
+if (document.getElementById('btnPrentDicht')) document.getElementById('btnPrentDicht').onclick = prentDicht;
 document.getElementById('btnStap').onclick = () => wisselMenu('stap-open');
 /* een keuze in het menu maken sluit het; zoom en donker niet, die probeer je vaak een paar keer */
 ['lesKies', 'boekKies'].forEach(id => document.getElementById(id).addEventListener('change', sluitMenus));

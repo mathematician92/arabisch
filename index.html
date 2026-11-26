@@ -146,39 +146,88 @@ main{max-width:900px;margin:0 auto;padding:0 clamp(12px,3.5vw,18px) 36px}
 .blad .sub{margin:0 0 18px;font-size:13px;color:var(--ink-2)}
 
 /* ---------- prentenboek (Qasas met plaatjes) ---------- */
-.prent-schakel{display:flex;gap:6px;justify-content:center;margin:0 0 10px}
-.prent-schakel button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink-2);
-  border-radius:999px;padding:5px 14px;cursor:pointer}
-.prent-schakel button.op{background:var(--rubric);border-color:var(--rubric);color:#fff;font-weight:600}
-.tekst.prent{--perk:#FBE3B3;--perk-2:#F3D59E;--perk-rand:#C9A46A;text-align:center}
-.prent-boek{margin:0 calc(-1 * clamp(14px,3.5vw,22px)) .4em;border-radius:var(--r) var(--r) 0 0;overflow:hidden;
-  background:radial-gradient(120% 80% at 50% 0%,var(--perk) 55%,var(--perk-2) 100%);border-bottom:1px solid var(--perk-rand)}
-.tekst.prent > .tekst-titel{margin-bottom:.4em}
+.prent-open{display:block;margin:0 auto 12px;font:inherit;font-size:15px;font-weight:600;cursor:pointer;
+  border:1px solid var(--rubric);background:color-mix(in srgb,var(--rubric) 8%,var(--card));color:var(--rubric);
+  border-radius:999px;padding:9px 20px}
+.prent-dicht{display:none}
+/* het boek vult het hele scherm; van de kopbalk blijven alleen ☰ en ✕ over */
+body.prent-vol{overflow:hidden}
+body.prent-vol .voet{display:none}
+.tekst.prent{--perk:#FBE3B3;--perk-2:#F3D59E;--perk-rand:#C9A46A;--perk-ink:#2B2116;--perk-ink-2:#6B5A44;
+  position:fixed;inset:0;z-index:45;margin:0;display:flex;flex-direction:column;text-align:center;
+  font-size:var(--pf,26px);line-height:1.85;
+  background:radial-gradient(120% 70% at 50% 40%,var(--perk) 55%,var(--perk-2) 100%)}
+.prent-boek{flex:1 1 auto;min-height:0;width:100%;max-width:640px;margin:0 auto;position:relative;
+  display:flex;flex-direction:column}
+.prent-kop{position:absolute;z-index:3;top:calc(env(safe-area-inset-top) + 8px);left:58px;right:58px;
+  height:40px;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.prent-kop .tekst-titel{pointer-events:auto;margin:0;font-size:21px;line-height:1.75;padding:0 .9em;
+  border:0;border-radius:999px;background:rgba(255,246,228,.93);color:var(--rubric);
+  box-shadow:0 2px 10px rgba(30,20,8,.3);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prent-bladen{flex:1 1 auto;min-height:0;position:relative}
 .prent-scene{display:none}
-.prent-scene.op{display:block;animation:prentIn .45s ease}
+.prent-scene.op{display:flex;flex-direction:column;height:100%;animation:prentIn .45s ease}
+.prent-scene.meet{display:flex!important;flex-direction:column;position:absolute;left:0;right:0;top:0;visibility:hidden;animation:none}
 @keyframes prentIn{from{opacity:0}to{opacity:1}}
-.prent-plaat{position:relative;height:min(52vh,calc(100vw * 1.15),560px);overflow:hidden}
+.prent-plaat{flex:1 1 auto;min-height:0;position:relative;overflow:hidden}
 .prent-plaat img{width:100%;height:100%;object-fit:cover;object-position:center 30%;display:block;
   transform:scale(1.06);transition:transform 7s ease-out}
 .prent-scene.op .prent-plaat img{transform:scale(1)}
-.prent-plaat:after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:64px;
+.prent-plaat:after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:44px;
   background:linear-gradient(to bottom,rgba(251,227,179,0),var(--perk))}
-.prent-tekst{position:relative;margin-top:-22px;padding:0 clamp(14px,3.5vw,22px) .3em;color:#2B2116}
+.prent-tekst{flex:0 0 auto;padding:14px 16px 2px;color:var(--perk-ink);font-size:var(--pf,26px);line-height:1.85}
 .prent-tekst .zin{display:block;opacity:0;transform:translateY(8px);transition-property:opacity,transform,background;transition-duration:.5s}
-.prent-scene.op .prent-tekst .zin{opacity:1;transform:none}
-.prent-nav{display:flex;align-items:center;gap:8px;direction:ltr;padding:6px 12px 12px;
+.prent-scene.op .prent-tekst .zin,.prent-scene.meet .prent-tekst .zin{opacity:1;transform:none}
+/* aangetikt: duidelijk anders dan het perkament */
+.prent-tekst .w:hover{background:rgba(255,255,255,.45)}
+.prent-tekst .w.onbekend{background:#FFFDF7;box-shadow:0 0 0 1px rgba(140,47,57,.35),0 2px 0 1px var(--rubric);border-radius:5px}
+.prent-nav{flex:0 0 auto;display:flex;align-items:center;gap:8px;direction:ltr;
+  padding:6px 12px calc(10px + env(safe-area-inset-bottom));
   font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:15px;line-height:1.4}
-.prent-nav .knop{padding:8px 14px;margin:0}
+.prent-nav .knop{padding:8px 14px;margin:0;min-width:104px}
+.prent-nav .knop.zacht{background:rgba(255,255,255,.55);border-color:var(--perk-rand);color:var(--perk-ink)}
 .prent-nav .knop:disabled{opacity:.35}
-.prent-stip{flex:1;display:flex;justify-content:center;gap:6px;cursor:pointer}
-.prent-stip i{width:8px;height:8px;border-radius:50%;background:var(--perk-rand);opacity:.5;transition:.3s}
+.prent-midden{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.prent-stip{display:flex;justify-content:center;gap:6px;cursor:pointer}
+.prent-stip i{width:8px;height:8px;border-radius:50%;background:var(--perk-rand);opacity:.6;transition:.3s}
 .prent-stip i.op{opacity:1;background:var(--rubric);width:22px;border-radius:4px}
+.prent-nr{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--perk-ink-2);min-height:15px}
+/* slotbladzijde */
+.prent-slot{direction:ltr;align-items:center;justify-content:center;text-align:center;gap:10px;padding:64px 24px 8px;
+  font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:15px;line-height:1.5;color:var(--perk-ink)}
+.prent-slot.op{display:flex}
+.prent-slot img{width:auto;max-width:56%;max-height:38%;min-height:0;aspect-ratio:820/1040;object-fit:cover;
+  border-radius:12px;border:3px solid #FFF6E6;box-shadow:0 6px 20px rgba(60,40,10,.3);transform:rotate(-3deg)}
+.prent-slot-titel{font-family:'Scheherazade New',serif;font-size:34px;line-height:1.6;color:var(--rubric);direction:rtl}
+.prent-slot p{margin:0}
+.prent-slot-tel{font-size:13px;color:var(--perk-ink-2)}
+.prent-slot .knop{margin:4px 0 0}
+.prent-wis{background:none;border:0;padding:4px;font:inherit;font-size:13px;color:var(--rubric);text-decoration:underline;cursor:pointer}
 .prent-rest{text-align:right}
 .prent-boek.stil .prent-scene.op{animation:none}
 .prent-boek.stil .prent-tekst .zin,.prent-boek.stil .prent-plaat img{transition:none!important}
-body.donker .tekst.prent{--perk:#3A2E1F;--perk-2:#2E2418;--perk-rand:#6B5535}
+body.donker .tekst.prent{--perk:#3A2E1F;--perk-2:#2A2117;--perk-rand:#7A6240;--perk-ink:#F1E6D2;--perk-ink-2:#C8B89C}
 body.donker .prent-plaat:after{background:linear-gradient(to bottom,rgba(58,46,31,0),var(--perk))}
-body.donker .prent-tekst{color:var(--ink)}
+body.donker .prent-tekst .w:hover{background:rgba(255,255,255,.1)}
+body.donker .prent-tekst .w.onbekend{background:rgba(255,236,200,.2);box-shadow:0 2px 0 1px #E8B04B}
+body.donker .prent-nav .knop.zacht{background:rgba(255,255,255,.08)}
+body.donker .prent-kop .tekst-titel{background:rgba(42,33,23,.9);color:#F0B5BC}
+/* de kopbalk op het volle scherm: alleen ☰ links en ✕ rechts, het menu klapt open zoals altijd */
+body.prent-vol header{position:fixed;top:0;left:0;right:0;z-index:47;background:transparent;border:0;pointer-events:none}
+body.prent-vol header::before{display:none}
+body.prent-vol header > *{pointer-events:auto}
+body.prent-vol header .mobbalk{display:flex;justify-content:space-between;align-items:center;height:56px;
+  max-width:640px;margin:0 auto;padding:0 10px;pointer-events:none}
+body.prent-vol header .mobbalk > *{display:none}
+body.prent-vol #btnMenu,body.prent-vol #btnPrentDicht{display:flex;align-items:center;justify-content:center;pointer-events:auto;
+  width:40px;height:40px;border-radius:50%;border:0;background:rgba(30,22,14,.55);color:#fff;font-size:19px;line-height:1;
+  box-shadow:0 1px 6px rgba(0,0,0,.3);cursor:pointer}
+body.prent-vol header .hwrap,body.prent-vol header #stappen{display:none}
+body.prent-vol header.menu-open{background:var(--paper);box-shadow:0 6px 24px rgba(0,0,0,.25)}
+body.prent-vol header.menu-open .hwrap{display:flex;padding-bottom:12px}
+body.prent-vol header.menu-open #btnMenu{background:var(--ink);color:var(--card)}
+body.prent-vol header .hwrap .zicht-knop.kop-knop:not([hidden]),
+body.prent-vol header .hwrap .lees-knop:not([hidden]){display:inline-flex;align-items:center;justify-content:center;gap:6px}
 
 /* ---------- de tekst ---------- */
 .tekst{font-family:'Scheherazade New',serif;direction:rtl;text-align:right;
@@ -1039,6 +1088,7 @@ button.pil-ev{cursor:pointer;border-color:var(--carry)}
     <button class="mob-lees" id="btnLeesMob" hidden aria-label="Voorlezen" aria-expanded="false">&#128264;</button>
     <button class="mob-zicht zicht-knop" id="btnZichtMob" hidden></button>
     <button class="mob-stap" id="btnStap" aria-expanded="false"></button>
+    <button class="prent-dicht" id="btnPrentDicht" aria-label="Sluit het prentenboek" title="Alleen tekst">&#10005;</button>
   </div>
   <div class="hwrap">
     <div class="bediening">
