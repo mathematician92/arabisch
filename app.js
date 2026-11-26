@@ -1453,6 +1453,99 @@ function tekenTekst(zinnen, titel, sub, markeer, nieuwSet) {
   return blad;
 }
 
+/* ---------------- prentenboek ----------------
+   Een les met plaatjes (L.prent, uit q/prent.json via voeg_prent.py) kan bij het
+   lezen als prentenboek: per scène een plaatje met de zinnen eronder, en
+   bladeren met vegen of de knoppen. De zinnen zelf komen gewoon uit tekenTekst,
+   dus aantikken, Nieuw / Al gezien, voorlezen en opnames werken precies zoals
+   in de gewone tekst: we verdelen alleen de zinnen over de bladzijden. */
+const prentKan = L => !window.__DATA__ && Array.isArray(L.prent) && L.prent.length > 0;
+function prentSchakel() {
+  const r = el('div', 'prent-schakel');
+  [['Prentenboek', true], ['Alleen tekst', false]].forEach(([t, v]) => {
+    const b = el('button', (WI.prent !== false) === v ? 'op' : '', t);
+    b.onclick = () => { WI.prent = v; bewaarWI(); teken(); };
+    r.appendChild(b);
+  });
+  return r;
+}
+/* onthoud de bladzijde: na een tik op een woord wordt het scherm opnieuw getekend */
+const PRENT_BLAD = {};
+function maakPrent(blad, scenes) {
+  const sleutel = lesSleutel();
+  const t = blad.querySelector('.tekst');
+  if (!t) return;
+  t.classList.add('prent');
+  const boek = el('div', 'prent-boek');
+  const bladz = scenes.map((sc, i) => {
+    const b = el('div', 'prent-scene');
+    const p = el('div', 'prent-plaat');
+    const img = el('img');
+    img.src = 'data/plaatjes/' + sc.plaat; img.alt = ''; img.loading = i ? 'lazy' : 'eager';
+    p.appendChild(img);
+    const tx = el('div', 'prent-tekst');
+    for (let z = sc.van; z <= sc.tot; z++) {
+      const sp = t.querySelector('.zin[data-zin="' + z + '"]');
+      if (!sp) continue;
+      /* een <br> achter de zin hoort er niet meer bij: elke zin staat al op een eigen regel */
+      if (sp.nextSibling && sp.nextSibling.nodeName === 'BR') sp.nextSibling.remove();
+      sp.style.transitionDelay = (0.2 + (z - sc.van) * 0.15) + 's';
+      tx.appendChild(sp); tx.appendChild(document.createTextNode(' '));
+    }
+    b.appendChild(p); b.appendChild(tx);
+    boek.appendChild(b);
+    return b;
+  });
+  /* zinnen die in geen enkele scène vallen, blijven als gewone tekst onder het boek */
+  const rest = [...t.querySelectorAll(':scope > .zin, :scope > br')];
+  t.insertBefore(boek, t.querySelector(':scope > .zin, :scope > br') || null);
+  const nav = el('div', 'prent-nav');
+  const vorige = el('button', 'knop zacht', '← Vorige');
+  const stip = el('div', 'prent-stip');
+  bladz.forEach(() => stip.appendChild(el('i')));
+  const volgende = el('button', 'knop', 'Volgende →');
+  nav.appendChild(vorige); nav.appendChild(stip); nav.appendChild(volgende);
+  boek.appendChild(nav);
+  if (rest.length) { const r = el('div', 'prent-rest'); rest.forEach(x => r.appendChild(x)); t.appendChild(r); }
+  let nu = -1;
+  const zet = i => {
+    i = Math.max(0, Math.min(bladz.length - 1, i));
+    if (i === nu) return;
+    nu = i; PRENT_BLAD[sleutel] = i;
+    bladz.forEach((b, j) => b.classList.toggle('op', j === i));
+    [...stip.children].forEach((d, j) => d.classList.toggle('op', j === i));
+    vorige.disabled = i === 0;
+    volgende.disabled = i === bladz.length - 1;
+    volgende.textContent = i === bladz.length - 1 ? 'Einde' : 'Volgende →';
+  };
+  vorige.onclick = () => zet(nu - 1);
+  volgende.onclick = () => zet(nu + 1);
+  stip.onclick = e => { const k = [...stip.children].indexOf(e.target); if (k >= 0) zet(k); };
+  let sx = null, sy = null;
+  boek.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  boek.addEventListener('touchend', e => {
+    if (sx == null) return;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    /* vegen naar links = verder, zoals de knoppen staan */
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) zet(nu + (dx < 0 ? 1 : -1));
+    sx = null;
+  });
+  /* Voorlezen of een opname loopt door de hele tekst: sla mee om naar de
+     bladzijde met de zin die nu klinkt. */
+  new MutationObserver(() => {
+    const k = t.querySelector('.zin.klinkt, .w.klinkt, .w.speelt');
+    if (!k) return;
+    const j = bladz.findIndex(b => b.contains(k));
+    if (j >= 0) zet(j);
+  }).observe(t, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  /* opnieuw getekend (na een tik)? dan zonder inloop-animatie */
+  if (sleutel in PRENT_BLAD) {
+    boek.classList.add('stil');
+    setTimeout(() => boek.classList.remove('stil'), 50);
+  }
+  zet(PRENT_BLAD[sleutel] || 0);
+}
+
 /* ---------------- voorlezen ----------------
    De stemmen van het toestel zelf (SpeechSynthesis). Geen abonnement, geen
    sleutel, werkt ook zonder verbinding zodra de stem eenmaal geladen is.
@@ -3613,6 +3706,10 @@ function teken() {
   if (S.stap === 0) {
     const blad = tekenTekst(L.zinnen, lesKern(L.titel),
 '', true);
+    if (prentKan(L)) {
+      m.appendChild(prentSchakel());
+      if (WI.prent !== false) maakPrent(blad, L.prent);
+    }
     const tel = el('div', 'balk-tekst');
     tel.style.marginTop = '16px';
     tel.textContent = S.geklikt.size
