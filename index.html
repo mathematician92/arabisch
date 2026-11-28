@@ -181,6 +181,11 @@ body.prent-vol .voet{display:none}
 /* aangetikt: duidelijk anders dan het perkament */
 .prent-tekst .w:hover{background:rgba(255,255,255,.45)}
 .prent-tekst .w.onbekend{background:#FFFDF7;box-shadow:0 0 0 1px rgba(140,47,57,.35),0 2px 0 1px var(--rubric);border-radius:5px}
+/* voorlezen: de zin die klinkt licht op, het woord dat klinkt is rood; allebei goed te zien op het perkament */
+.prent-tekst .zin.klinkt{background:#FFFBF2;border-radius:10px;box-shadow:0 0 0 1px rgba(140,47,57,.3),0 2px 8px rgba(90,60,20,.15)}
+.prent-tekst .w.klinkt-nu{background:var(--rubric);color:#fff!important;box-shadow:0 0 0 2px var(--rubric);border-radius:5px}
+body.donker .prent-tekst .zin.klinkt{background:rgba(255,255,255,.12);box-shadow:0 0 0 1px rgba(232,176,75,.4)}
+body.donker .prent-tekst .w.klinkt-nu{background:#B23A48;box-shadow:0 0 0 2px #B23A48;color:#fff!important}
 .prent-nav{flex:0 0 auto;display:flex;align-items:center;gap:8px;direction:ltr;
   padding:6px 12px calc(10px + env(safe-area-inset-bottom));
   font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:15px;line-height:1.4}

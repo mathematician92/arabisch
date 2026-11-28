@@ -1475,6 +1475,8 @@ function prentDicht() {
 }
 /* onthoud de bladzijde: na een tik op een woord wordt het scherm opnieuw getekend */
 const PRENT_BLAD = {};
+/* de maatfunctie van het open prentenboek: A−/A+ roept hem meteen aan */
+let prentPas = null;
 /* klaar = { tel: tekst over aangetikte woorden, verder: knop-actie, wis: actie of null } */
 function maakPrent(blad, scenes, klaar) {
   const sleutel = lesSleutel();
@@ -1587,10 +1589,13 @@ function maakPrent(blad, scenes, klaar) {
     bladz.forEach(b => b.classList.add('meet'));
     const hoogste = () => Math.max(...bladz.map(b => b.querySelector('.prent-tekst').offsetHeight));
     boek.style.setProperty('--pf', f + 'px');
-    while (f > 14 && hoogste() > ruimte * 0.5) { f -= 1; boek.style.setProperty('--pf', f + 'px'); }
+    /* groter zetten (A+) mag de tekst wat meer ruimte geven, het plaatje blijft zichtbaar */
+    const deel = Math.min(0.66, 0.5 * Math.max(1, S.zoom || 1));
+    while (f > 14 && hoogste() > ruimte * deel) { f -= 1; boek.style.setProperty('--pf', f + 'px'); }
     bladz.forEach(b => b.classList.remove('meet'));
   };
   addEventListener('resize', pas);
+  prentPas = pas;
   requestAnimationFrame(pas);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(pas);
 
@@ -3904,6 +3909,7 @@ function pasWeergaveToe() {
   if (u) u.disabled = (S.zoom || 1) <= 0.75;
   const i = document.getElementById('btnIn');
   if (i) i.disabled = (S.zoom || 1) >= 1.6;
+  if (prentPas) prentPas();
 }
 
 function stelWeergaveIn(veld, waarde) {
