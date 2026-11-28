@@ -1590,8 +1590,24 @@ function maakPrent(blad, scenes, klaar) {
     const hoogste = () => Math.max(...bladz.map(b => b.querySelector('.prent-tekst').offsetHeight));
     boek.style.setProperty('--pf', f + 'px');
     /* groter zetten (A+) mag de tekst wat meer ruimte geven, het plaatje blijft zichtbaar */
-    const deel = Math.min(0.66, 0.5 * Math.max(1, S.zoom || 1));
-    while (f > 14 && hoogste() > ruimte * deel) { f -= 1; boek.style.setProperty('--pf', f + 'px'); }
+    let deel = Math.min(0.66, 0.5 * Math.max(1, S.zoom || 1));
+    /* Een bladzijde met veel (korte) zinnen: elke zin op een eigen regel kost
+       te veel plaats, dan lopen de zinnen daar door zoals in een gewone tekst.
+       Pas als dat nog niet genoeg is, worden de letters kleiner. */
+    bladz.forEach(b => b.classList.remove('vloei'));
+    for (const b of bladz) {
+      const tx = b.querySelector('.prent-tekst');
+      if (tx.offsetHeight > ruimte * deel) {
+        const zonder = tx.offsetHeight;
+        b.classList.add('vloei');
+        if (tx.offsetHeight >= zonder) b.classList.remove('vloei');
+      }
+    }
+    while (f > 14 && hoogste() > ruimte * deel) {
+      /* liever een iets kleiner plaatje dan heel kleine letters */
+      if (f <= 20 && deel < 0.6) { deel = 0.6; continue; }
+      f -= 1; boek.style.setProperty('--pf', f + 'px');
+    }
     bladz.forEach(b => b.classList.remove('meet'));
   };
   addEventListener('resize', pas);
